@@ -1,0 +1,115 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRole } from '../users/enums/user-role.enum';
+import type { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
+import { StudentsService } from './students.service';
+import { CreateStudentDto } from './dto/create-student.dto';
+import { UpdateStudentDto } from './dto/update-student.dto';
+import {
+  RejectStudentDto,
+  RequestChangesStudentDto,
+} from './dto/review-student.dto';
+import { ApplicationStatus } from './enums/application-status.enum';
+
+@Controller('students')
+@UseGuards(JwtAuthGuard)
+export class StudentsController {
+  constructor(private readonly studentsService: StudentsService) {}
+
+  @Post()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.PARENT, UserRole.SCHOOL)
+  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateStudentDto) {
+    return this.studentsService.create(user, dto);
+  }
+
+  @Get()
+  findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query('status') status?: ApplicationStatus,
+    @Query('certificateStatus') certificateStatus?: 'issued' | 'not_issued',
+    @Query('search') search?: string,
+  ) {
+    return this.studentsService.findAllForUser(user, {
+      status,
+      certificateStatus,
+      search,
+    });
+  }
+
+  @Get(':id')
+  findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.studentsService.findOneForUser(user, id);
+  }
+
+  @Patch(':id/approve')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OPERATOR)
+  approve(@CurrentUser('sub') operatorId: string, @Param('id') id: string) {
+    return this.studentsService.approve(operatorId, id);
+  }
+
+  @Patch(':id/reject')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OPERATOR)
+  reject(
+    @CurrentUser('sub') operatorId: string,
+    @Param('id') id: string,
+    @Body() dto: RejectStudentDto,
+  ) {
+    return this.studentsService.reject(operatorId, id, dto.reason);
+  }
+
+  @Patch(':id/request-changes')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OPERATOR)
+  requestChanges(
+    @CurrentUser('sub') operatorId: string,
+    @Param('id') id: string,
+    @Body() dto: RequestChangesStudentDto,
+  ) {
+    return this.studentsService.requestChanges(operatorId, id, dto.reason);
+  }
+
+  @Patch(':id/issue-certificate')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OPERATOR)
+  issueCertificate(@Param('id') id: string) {
+    return this.studentsService.issueCertificate(id);
+  }
+
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.PARENT, UserRole.SCHOOL)
+  update(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: UpdateStudentDto,
+  ) {
+    return this.studentsService.update(user, id, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.PARENT, UserRole.SCHOOL)
+  @HttpCode(HttpStatus.OK)
+  async remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    await this.studentsService.remove(user, id);
+    return { message: 'Student removed' };
+  }
+}

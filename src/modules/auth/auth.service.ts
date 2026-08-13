@@ -1,0 +1,292 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcrypt';
+import { DataSource } from 'typeorm';
+import { UsersService } from '../users/users.service';
+import { UserRole } from '../users/enums/user-role.enum';
+import { InstitutionsService } from '../institutions/institutions.service';
+import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
+import { OtpService } from './otp.service';
+import { TokenService, RequestMeta } from './token.service';
+import { OtpPurpose } from './enums/otp-purpose.enum';
+import {
+  EMAIL_SERVICE,
+  type EmailProvider,
+} from '../email/interfaces/email-provider.interface';
+import { RegisterParentDto } from './dto/register-parent.dto';
+import { RegisterSchoolDto } from './dto/register-school.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
+import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly institutionsService: InstitutionsService,
+    private readonly otpService: OtpService,
+    private readonly tokenService: TokenService,
+    @Inject(EMAIL_SERVICE) private readonly emailService: EmailProvider,
+    private readonly dataSource: DataSource,
+    private readonly config: ConfigService,
+  ) {}
+
+  private hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(
+      password,
+      this.config.get<number>('BCRYPT_SALT_ROUNDS')!,
+    );
+  }
+
+  async registerParent(dto: RegisterParentDto) {
+    const existing = await this.usersService.findByEmail(dto.email);
+    if (existing) {
+      throw new ConflictException('Email already registered');
+    }
+
+    const passwordHash = await this.hashPassword(dto.password);
+    const user = this.usersService.create({
+      email: dto.email,
+      passwordHash,
+      name: dto.name,
+      role: UserRole.PARENT,
+      phone: dto.phone ?? null,
+    });
+    const saved = await this.usersService.save(user);
+
+    const code = await this.otpService.generate(
+      saved.id,
+      OtpPurpose.EMAIL_VERIFICATION,
+    );
+    await this.emailService.sendOtpEmail(
+      saved.email,
+      code,
+      OtpPurpose.EMAIL_VERIFICATION,
+    );
+
+    return {
+      userId: saved.id,
+      email: saved.email,
+      message: 'Verification code sent',
+    };
+  }
+
+  async registerSchool(dto: RegisterSchoolDto) {
+    const existingUser = await this.usersService.findByEmail(dto.email);
+    if (existingUser) {
+      throw new ConflictException('Email already registered');
+    }
+
+    const existingInstitution =
+      await this.institutionsService.findByRegistrationNumber(
+        dto.institution.registrationNumber,
+      );
+    if (existingInstitution) {
+      throw new ConflictException(
+        'Institution registration number already registered',
+      );
+    }
+
+    const passwordHash = await this.hashPassword(dto.password);
+
+    const { user, institution } = await this.dataSource.transaction(
+      async (manager) => {
+        const user = await this.usersService.createWithManager(manager, {
+          email: dto.email,
+          passwordHash,
+          name: dto.name,
+          role: UserRole.SCHOOL,
+          phone: dto.phone ?? null,
+        });
+
+        const institution = await this.institutionsService.createWithManager(
+          manager,
+          {
+            ownerUserId: user.id,
+            ...dto.institution,
+          },
+        );
+
+        return { user, institution };
+      },
+    );
+
+    const code = await this.otpService.generate(
+      user.id,
+      OtpPurpose.EMAIL_VERIFICATION,
+    );
+    await this.emailService.sendOtpEmail(
+      user.email,
+      code,
+      OtpPurpose.EMAIL_VERIFICATION,
+    );
+
+    return {
+      userId: user.id,
+      institutionId: institution.id,
+      email: user.email,
+      message: 'Verification code sent',
+    };
+  }
+
+  async verifyEmail(dto: VerifyEmailDto) {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user) {
+      throw new BadRequestException('Invalid or expired code');
+    }
+
+    await this.otpService.verify(
+      user.id,
+      OtpPurpose.EMAIL_VERIFICATION,
+      dto.code,
+    );
+    await this.usersService.markEmailVerified(user.id);
+
+    return { verified: true, message: 'Email verified. You can now log in.' };
+  }
+
+  async resendOtp(dto: ResendOtpDto) {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (user) {
+      const code = await this.otpService.generate(user.id, dto.purpose);
+      await this.emailService.sendOtpEmail(user.email, code, dto.purpose);
+    }
+    return { message: 'If an account exists, a new code has been sent.' };
+  }
+
+  async login(dto: LoginDto, meta: RequestMeta = {}) {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (
+      !user ||
+      !user.isActive ||
+      !(await bcrypt.compare(dto.password, user.passwordHash))
+    ) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.emailVerified) {
+      throw new ForbiddenException({
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Email not verified',
+      });
+    }
+
+    if (user.role === UserRole.SCHOOL) {
+      const institution = await this.institutionsService.findByOwnerUserId(
+        user.id,
+      );
+
+      if (
+        institution?.approvalStatus === InstitutionApprovalStatus.PENDING_REVIEW
+      ) {
+        return {
+          status: 'PENDING_APPROVAL',
+          message: 'Your institution is awaiting operational review.',
+        };
+      }
+
+      if (institution?.approvalStatus === InstitutionApprovalStatus.REJECTED) {
+        return {
+          status: 'REJECTED',
+          message: 'Your institution registration was rejected.',
+          reason: institution.rejectionReason,
+        };
+      }
+    }
+
+    const tokens = await this.tokenService.issueTokenPair(user, meta);
+    return {
+      status: 'OK',
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    };
+  }
+
+  async refresh(dto: RefreshTokenDto, meta: RequestMeta = {}) {
+    return this.tokenService.rotateRefreshToken(dto.refreshToken, meta);
+  }
+
+  async logout(dto: RefreshTokenDto) {
+    await this.tokenService.revokeRefreshToken(dto.refreshToken);
+    return { message: 'Logged out' };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (user) {
+      const code = await this.otpService.generate(
+        user.id,
+        OtpPurpose.PASSWORD_RESET,
+      );
+      await this.emailService.sendOtpEmail(
+        user.email,
+        code,
+        OtpPurpose.PASSWORD_RESET,
+      );
+    }
+    return { message: 'If an account exists, a reset code has been sent.' };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user) {
+      throw new BadRequestException('Invalid or expired code');
+    }
+
+    await this.otpService.verify(user.id, OtpPurpose.PASSWORD_RESET, dto.code);
+    const passwordHash = await this.hashPassword(dto.newPassword);
+    await this.usersService.updatePassword(user.id, passwordHash);
+    await this.tokenService.revokeAllForUser(user.id);
+
+    return { message: 'Password reset successful. Please log in.' };
+  }
+
+  async getMe(userId: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    const base = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      phone: user.phone,
+      emailVerified: user.emailVerified,
+    };
+
+    if (user.role === UserRole.SCHOOL) {
+      const institution = await this.institutionsService.findByOwnerUserId(
+        user.id,
+      );
+      return {
+        ...base,
+        institution: institution
+          ? {
+              id: institution.id,
+              name: institution.name,
+              approvalStatus: institution.approvalStatus,
+            }
+          : null,
+      };
+    }
+
+    return base;
+  }
+}
