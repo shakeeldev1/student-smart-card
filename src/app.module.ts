@@ -32,6 +32,9 @@ import { CardsModule } from './modules/cards/cards.module';
         database: config.get<string>('DB_NAME'),
         synchronize: false,
         logging: config.get<boolean>('DB_LOGGING'),
+        ssl: config.get<boolean>('DB_SSL')
+          ? { rejectUnauthorized: false }
+          : false,
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
       }),
     }),
