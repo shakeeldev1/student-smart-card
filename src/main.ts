@@ -17,8 +17,9 @@ async function bootstrap() {
       .get<string>('CORS_ORIGIN')!
       .split(',')
       .map((origin) => origin.trim()),
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
   });
 
   app.setGlobalPrefix('api/v1');
