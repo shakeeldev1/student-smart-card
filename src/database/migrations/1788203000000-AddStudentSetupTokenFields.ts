@@ -20,9 +20,18 @@ export class AddStudentSetupTokenFields1788203000000
       `CREATE INDEX IF NOT EXISTS "IDX_students_userId" ON "students" ("userId")`,
     );
 
-    await queryRunner.query(
-      `ALTER TABLE "students" ADD CONSTRAINT IF NOT EXISTS "FK_students_userId" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL`,
-    );
+    // Check if constraint exists before adding
+    const constraintExists = await queryRunner.query(`
+      SELECT constraint_name 
+      FROM information_schema.table_constraints 
+      WHERE table_name = 'students' AND constraint_name = 'FK_students_userId'
+    `);
+
+    if (constraintExists.length === 0) {
+      await queryRunner.query(
+        `ALTER TABLE "students" ADD CONSTRAINT "FK_students_userId" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL`,
+      );
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
@@ -47,3 +56,4 @@ export class AddStudentSetupTokenFields1788203000000
     );
   }
 }
+
