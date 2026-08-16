@@ -62,6 +62,13 @@ export class StudentsController {
     });
   }
 
+  @Get('me')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.STUDENT)
+  findMine(@CurrentUser('sub') userId: string) {
+    return this.studentsService.findByUserId(userId);
+  }
+
   @Get(':id')
   @UseGuards(RolesGuard)
   @Roles(

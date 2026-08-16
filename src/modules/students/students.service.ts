@@ -215,6 +215,17 @@ export class StudentsService {
     return student;
   }
 
+  async findByUserId(userId: string): Promise<Student> {
+    const student = await this.studentsRepository.findOne({
+      where: { userId },
+      relations: { card: true, institution: true },
+    });
+    if (!student) {
+      throw new NotFoundException('No student record linked to this account');
+    }
+    return student;
+  }
+
   async update(
     currentUser: JwtPayload,
     id: string,
