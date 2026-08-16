@@ -37,7 +37,7 @@ async function main() {
     email: email.toLowerCase(),
     passwordHash,
     name,
-    role: UserRole.EFU,
+    role: UserRole.ADMIN,
     emailVerified: true,
     isActive: true,
   });
