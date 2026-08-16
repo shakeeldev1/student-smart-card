@@ -24,3 +24,6 @@ yarn-error.log
 # tests
 /coverage
 /.nyc_output
+
+# uploads
+/uploads

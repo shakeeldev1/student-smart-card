@@ -13,6 +13,7 @@ import { EmailModule } from './modules/email/email.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { StudentsModule } from './modules/students/students.module';
 import { CardsModule } from './modules/cards/cards.module';
+import { InternshipsModule } from './modules/internships/internships.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { CardsModule } from './modules/cards/cards.module';
     AuthModule,
     StudentsModule,
     CardsModule,
+    InternshipsModule,
   ],
   controllers: [AppController],
   providers: [
