@@ -14,6 +14,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { StudentsModule } from './modules/students/students.module';
 import { CardsModule } from './modules/cards/cards.module';
 import { InternshipsModule } from './modules/internships/internships.module';
+import { ClaimsModule } from './modules/claims/claims.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { InternshipsModule } from './modules/internships/internships.module';
     StudentsModule,
     CardsModule,
     InternshipsModule,
+    ClaimsModule,
   ],
   controllers: [AppController],
   providers: [
