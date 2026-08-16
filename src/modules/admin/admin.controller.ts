@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -14,5 +14,45 @@ export class AdminController {
   @Get('stats')
   getStats() {
     return this.adminService.getStats();
+  }
+
+  @Get('reports/students.csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header(
+    'Content-Disposition',
+    'attachment; filename="student-activity-report.csv"',
+  )
+  getStudentsReport() {
+    return this.adminService.getStudentsReportCsv();
+  }
+
+  @Get('reports/institutions.csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header(
+    'Content-Disposition',
+    'attachment; filename="institution-compliance-summary.csv"',
+  )
+  getInstitutionsReport() {
+    return this.adminService.getInstitutionsReportCsv();
+  }
+
+  @Get('reports/claims.csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header(
+    'Content-Disposition',
+    'attachment; filename="claims-overview.csv"',
+  )
+  getClaimsReport() {
+    return this.adminService.getClaimsReportCsv();
+  }
+
+  @Get('reports/pending-approvals.csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header(
+    'Content-Disposition',
+    'attachment; filename="pending-approvals.csv"',
+  )
+  getPendingApprovalsReport() {
+    return this.adminService.getPendingApprovalsReportCsv();
   }
 }

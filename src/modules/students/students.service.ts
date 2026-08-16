@@ -21,6 +21,7 @@ import {
 import { UserRole } from '../users/enums/user-role.enum';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { ApplicationStatus } from './enums/application-status.enum';
+import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 
 export interface StudentFilters {
   status?: ApplicationStatus;
@@ -55,6 +56,7 @@ export class StudentsService {
 
     let institutionId: string | null = null;
     let institutionNameFreeText: string | null = null;
+    let autoApprove = false;
     let consent = {
       consentEnrollment: true,
       consentIdentityVerification: true,
@@ -70,6 +72,11 @@ export class StudentsService {
         throw new ForbiddenException('No institution found for this account');
       }
       institutionId = institution.id;
+      // Students registered directly by a verified school are trusted and
+      // skip manual review; a school whose own institution hasn't been
+      // approved yet still goes through the normal pending queue.
+      autoApprove =
+        institution.approvalStatus === InstitutionApprovalStatus.APPROVED;
     } else {
       if (!dto.institutionName?.trim()) {
         throw new BadRequestException(
@@ -115,8 +122,17 @@ export class StudentsService {
       ...consent,
       institutionId,
       registeredByUserId: currentUser.sub,
+      ...(autoApprove && {
+        status: ApplicationStatus.APPROVED,
+        reviewedAt: new Date(),
+        reviewNote: 'Auto-approved: registered directly by a verified school',
+      }),
     });
-    const saved = await this.studentsRepository.save(student);
+    let saved = await this.studentsRepository.save(student);
+
+    if (autoApprove) {
+      saved = await this.grantCertificateAndCard(saved);
+    }
 
     // Generate setup token and send email
     if (saved.email) {
@@ -252,6 +268,10 @@ export class StudentsService {
         'Only approved applications can receive a certificate',
       );
     }
+    return this.grantCertificateAndCard(student);
+  }
+
+  private async grantCertificateAndCard(student: Student): Promise<Student> {
     if (!student.certificateIssued) {
       student.certificateIssued = true;
       student.certificateNumber = `SSC-${randomBytes(4).toString('hex').toUpperCase()}`;
