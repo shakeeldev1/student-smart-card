@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmailOtp } from './entities/email-otp.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
+import { Student } from '../students/entities/student.entity';
 import { UsersModule } from '../users/users.module';
 import { InstitutionsModule } from '../institutions/institutions.module';
 import { OtpService } from './otp.service';
@@ -14,7 +15,7 @@ import { AuthController } from './auth.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([EmailOtp, RefreshToken]),
+    TypeOrmModule.forFeature([EmailOtp, RefreshToken, Student]),
     UsersModule,
     InstitutionsModule,
     PassportModule,
