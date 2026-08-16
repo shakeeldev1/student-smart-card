@@ -111,7 +111,7 @@ export class StudentsController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.SCHOOL)
+  @Roles(UserRole.PARENT, UserRole.SCHOOL, UserRole.ADMIN)
   update(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
@@ -122,7 +122,7 @@ export class StudentsController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.SCHOOL)
+  @Roles(UserRole.PARENT, UserRole.SCHOOL, UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
   async remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     await this.studentsService.remove(user, id);

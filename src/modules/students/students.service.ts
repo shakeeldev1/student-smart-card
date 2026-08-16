@@ -274,7 +274,8 @@ export class StudentsService {
   ): Promise<void> {
     if (
       currentUser.role === UserRole.OPERATOR ||
-      currentUser.role === UserRole.EFU
+      currentUser.role === UserRole.EFU ||
+      currentUser.role === UserRole.ADMIN
     ) {
       return;
     }

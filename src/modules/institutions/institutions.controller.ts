@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
   Patch,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -14,6 +16,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { InstitutionsService } from './institutions.service';
 import { RejectInstitutionDto } from './dto/reject-institution.dto';
+import { UpdateInstitutionDto } from './dto/update-institution.dto';
+import { InstitutionApprovalStatus } from './enums/institution-approval-status.enum';
 
 @Controller('institutions')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -37,6 +41,15 @@ export class InstitutionsController {
     return this.institutionsService.findPending();
   }
 
+  @Get()
+  @Roles(UserRole.ADMIN)
+  findAllAdmin(
+    @Query('status') status?: InstitutionApprovalStatus,
+    @Query('search') search?: string,
+  ) {
+    return this.institutionsService.findAllAdmin({ status, search });
+  }
+
   @Patch(':id/approve')
   approve(@Param('id') id: string, @CurrentUser('sub') operatorId: string) {
     return this.institutionsService.approve(id, operatorId);
@@ -45,5 +58,17 @@ export class InstitutionsController {
   @Patch(':id/reject')
   reject(@Param('id') id: string, @Body() dto: RejectInstitutionDto) {
     return this.institutionsService.reject(id, dto.reason);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.ADMIN)
+  update(@Param('id') id: string, @Body() dto: UpdateInstitutionDto) {
+    return this.institutionsService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.ADMIN)
+  remove(@Param('id') id: string) {
+    return this.institutionsService.remove(id);
   }
 }
