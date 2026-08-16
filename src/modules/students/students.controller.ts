@@ -52,11 +52,13 @@ export class StudentsController {
     @Query('status') status?: ApplicationStatus,
     @Query('certificateStatus') certificateStatus?: 'issued' | 'not_issued',
     @Query('search') search?: string,
+    @Query('institutionId') institutionId?: string,
   ) {
     return this.studentsService.findAllForUser(user, {
       status,
       certificateStatus,
       search,
+      institutionId,
     });
   }
 
@@ -75,14 +77,14 @@ export class StudentsController {
 
   @Patch(':id/approve')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OPERATOR)
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   approve(@CurrentUser('sub') operatorId: string, @Param('id') id: string) {
     return this.studentsService.approve(operatorId, id);
   }
 
   @Patch(':id/reject')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OPERATOR)
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   reject(
     @CurrentUser('sub') operatorId: string,
     @Param('id') id: string,
@@ -93,7 +95,7 @@ export class StudentsController {
 
   @Patch(':id/request-changes')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OPERATOR)
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   requestChanges(
     @CurrentUser('sub') operatorId: string,
     @Param('id') id: string,
@@ -104,7 +106,7 @@ export class StudentsController {
 
   @Patch(':id/issue-certificate')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OPERATOR)
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   issueCertificate(@Param('id') id: string) {
     return this.studentsService.issueCertificate(id);
   }

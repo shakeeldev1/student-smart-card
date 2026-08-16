@@ -37,6 +37,7 @@ export class InstitutionsController {
   }
 
   @Get('pending')
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   findPending() {
     return this.institutionsService.findPending();
   }
@@ -51,11 +52,13 @@ export class InstitutionsController {
   }
 
   @Patch(':id/approve')
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   approve(@Param('id') id: string, @CurrentUser('sub') operatorId: string) {
     return this.institutionsService.approve(id, operatorId);
   }
 
   @Patch(':id/reject')
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   reject(@Param('id') id: string, @Body() dto: RejectInstitutionDto) {
     return this.institutionsService.reject(id, dto.reason);
   }

@@ -26,6 +26,7 @@ export interface StudentFilters {
   status?: ApplicationStatus;
   certificateStatus?: 'issued' | 'not_issued';
   search?: string;
+  institutionId?: string;
 }
 
 @Injectable()
@@ -160,6 +161,10 @@ export class StudentsService {
     } else if (currentUser.role === UserRole.PARENT) {
       qb.andWhere('student.registeredByUserId = :userId', {
         userId: currentUser.sub,
+      });
+    } else if (currentUser.role === UserRole.ADMIN && filters.institutionId) {
+      qb.andWhere('student.institutionId = :institutionId', {
+        institutionId: filters.institutionId,
       });
     }
 
