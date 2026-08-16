@@ -242,7 +242,10 @@ export class StudentsService {
     currentUser: JwtPayload,
     student: Student,
   ): Promise<void> {
-    if (currentUser.role === UserRole.OPERATOR) {
+    if (
+      currentUser.role === UserRole.OPERATOR ||
+      currentUser.role === UserRole.EFU
+    ) {
       return;
     }
 

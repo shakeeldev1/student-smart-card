@@ -89,4 +89,24 @@ export class NodemailerEmailService implements EmailProvider, OnModuleInit {
       html: `<p>${intro}</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${code}</p><p>This code expires shortly. If you did not request this, you can ignore this email.</p>`,
     });
   }
+
+  async sendCardVerificationEmail(
+    to: string,
+    studentName: string,
+    cardNumber: string,
+    code: string,
+  ): Promise<void> {
+    await this.sendMail({
+      to,
+      subject: 'Verify your Student Smart Card',
+      text:
+        `Hello ${studentName},\n\nYour Student Smart Card (${cardNumber}) is ready to be verified before use.\n\nVerification code: ${code}\n\nUse this code to confirm the card belongs to you before it is activated for use.`,
+      html: `
+        <p>Hello ${studentName},</p>
+        <p>Your Student Smart Card <strong>${cardNumber}</strong> is ready to be verified before use.</p>
+        <p style="font-size:24px;font-weight:bold;letter-spacing:4px;margin:20px 0;">${code}</p>
+        <p>Use this code to confirm the card belongs to you before it is activated for use.</p>
+      `,
+    });
+  }
 }

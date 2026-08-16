@@ -9,6 +9,12 @@ export interface SendMailOptions {
 
 export interface EmailProvider {
   sendOtpEmail(to: string, code: string, purpose: OtpPurpose): Promise<void>;
+  sendCardVerificationEmail(
+    to: string,
+    studentName: string,
+    cardNumber: string,
+    code: string,
+  ): Promise<void>;
   sendMail(options: SendMailOptions): Promise<void>;
 }
 

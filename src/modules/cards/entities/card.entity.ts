@@ -28,11 +28,17 @@ export class Card {
   @Column({ type: 'varchar' })
   cardNumber: string;
 
-  @Column({ type: 'enum', enum: CardStatus, default: CardStatus.ACTIVE })
+  @Column({ type: 'enum', enum: CardStatus, default: CardStatus.PENDING_VERIFICATION })
   status: CardStatus;
 
   @Column({ type: 'timestamptz' })
   issuedAt: Date;
+
+  @Column({ type: 'varchar', nullable: true })
+  verificationCode: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  verificationCodeExpiresAt: Date | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
