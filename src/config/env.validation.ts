@@ -36,6 +36,7 @@ export const envValidationSchema = Joi.object({
   ),
 
   CORS_ORIGIN: Joi.string().default('http://localhost:5173'),
+  FRONTEND_URL: Joi.string().uri().optional(),
 
   THROTTLE_TTL: Joi.number().default(60),
   THROTTLE_LIMIT: Joi.number().default(20),

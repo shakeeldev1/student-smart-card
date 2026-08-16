@@ -314,10 +314,23 @@ export class AuthService {
       throw new BadRequestException('Account already set up');
     }
 
+    if (!student.email) {
+      throw new BadRequestException(
+        'This student record has no email on file. Contact support to add one before setting up an account.',
+      );
+    }
+
+    const existingUser = await this.usersService.findByEmail(student.email);
+    if (existingUser) {
+      throw new ConflictException(
+        'An account with this email already exists. Please log in instead, or contact support if you believe this is an error.',
+      );
+    }
+
     // Create user account for student
     const passwordHash = await this.hashPassword(dto.password);
     const userEntity = this.usersService.create({
-      email: student.email!,
+      email: student.email,
       passwordHash,
       name: student.fullName,
       role: UserRole.STUDENT,

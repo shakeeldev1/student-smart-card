@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { Student } from './entities/student.entity';
@@ -39,6 +40,7 @@ export class StudentsService {
     private readonly cardsService: CardsService,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
+    private readonly config: ConfigService,
   ) {}
 
   async create(
@@ -150,7 +152,9 @@ export class StudentsService {
     student.setupTokenExpiresAt = expiresAt;
     await this.studentsRepository.save(student);
 
-    const setupLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/student-setup?token=${setupToken}`;
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
+    const setupLink = `${frontendUrl}/student-setup?token=${setupToken}`;
     await this.emailService.sendStudentSetupEmail(
       student.email!,
       student.fullName,

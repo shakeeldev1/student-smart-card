@@ -11,6 +11,10 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
 
+  if (!config.get<string>('FRONTEND_URL') && config.get<string>('NODE_ENV') === 'production') {
+    throw new Error('FRONTEND_URL must be configured in production');
+  }
+
   app.use(helmet());
   app.enableCors({
     origin: config
