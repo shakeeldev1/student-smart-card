@@ -5,7 +5,7 @@ import { User } from '../../modules/users/entities/user.entity';
 import { UserRole } from '../../modules/users/enums/user-role.enum';
 
 async function main() {
-  const email = process.argv[2] ?? 'admin@studentsmartcard.com';
+  const email = process.argv[2] ?? 'admin@studentsmartcardpk.com';
   const password = process.argv[3] ?? 'AdminDefault@123';
   const name = process.argv[4] ?? 'Admin';
 
