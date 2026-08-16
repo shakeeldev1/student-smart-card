@@ -40,7 +40,13 @@ export class StudentsController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.SCHOOL, UserRole.OPERATOR, UserRole.EFU)
+  @Roles(
+    UserRole.PARENT,
+    UserRole.SCHOOL,
+    UserRole.OPERATOR,
+    UserRole.EFU,
+    UserRole.ADMIN,
+  )
   findAll(
     @CurrentUser() user: JwtPayload,
     @Query('status') status?: ApplicationStatus,
@@ -56,7 +62,13 @@ export class StudentsController {
 
   @Get(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.SCHOOL, UserRole.OPERATOR, UserRole.EFU)
+  @Roles(
+    UserRole.PARENT,
+    UserRole.SCHOOL,
+    UserRole.OPERATOR,
+    UserRole.EFU,
+    UserRole.ADMIN,
+  )
   findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.studentsService.findOneForUser(user, id);
   }

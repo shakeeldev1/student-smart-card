@@ -24,7 +24,7 @@ export class ClaimsController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.OPERATOR, UserRole.EFU)
+  @Roles(UserRole.PARENT, UserRole.OPERATOR, UserRole.EFU, UserRole.ADMIN)
   async getClaims(@CurrentUser() user: User) {
     if (user.role === UserRole.PARENT) {
       return this.claimsService.getClaimsByStudent(user.id);
@@ -34,7 +34,7 @@ export class ClaimsController {
 
   @Get(':claimId')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.OPERATOR, UserRole.EFU)
+  @Roles(UserRole.PARENT, UserRole.OPERATOR, UserRole.EFU, UserRole.ADMIN)
   async getClaimById(
     @CurrentUser() user: User,
     @Param('claimId') claimId: string,

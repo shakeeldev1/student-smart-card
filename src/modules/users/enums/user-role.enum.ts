@@ -4,4 +4,5 @@ export enum UserRole {
   SCHOOL = 'school',
   OPERATOR = 'operator',
   EFU = 'efu',
+  ADMIN = 'admin',
 }
