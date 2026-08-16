@@ -15,6 +15,7 @@ import { StudentsModule } from './modules/students/students.module';
 import { CardsModule } from './modules/cards/cards.module';
 import { InternshipsModule } from './modules/internships/internships.module';
 import { ClaimsModule } from './modules/claims/claims.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { ClaimsModule } from './modules/claims/claims.module';
     CardsModule,
     InternshipsModule,
     ClaimsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

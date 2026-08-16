@@ -346,4 +346,13 @@ export class AuthService {
       refreshToken: tokens.refreshToken,
     };
   }
+
+  listActiveSessions() {
+    return this.tokenService.listActiveSessions();
+  }
+
+  async revokeSession(id: string): Promise<{ message: string }> {
+    await this.tokenService.revokeSession(id);
+    return { message: 'Session revoked' };
+  }
 }

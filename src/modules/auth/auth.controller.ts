@@ -4,6 +4,8 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -11,7 +13,10 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRole } from '../users/enums/user-role.enum';
 import { AuthService } from './auth.service';
 import { RegisterParentDto } from './dto/register-parent.dto';
 import { RegisterSchoolDto } from './dto/register-school.dto';
@@ -107,5 +112,19 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser('sub') userId: string) {
     return this.authService.getMe(userId);
+  }
+
+  @Get('sessions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  listSessions() {
+    return this.authService.listActiveSessions();
+  }
+
+  @Patch('sessions/:id/revoke')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  revokeSession(@Param('id') id: string) {
+    return this.authService.revokeSession(id);
   }
 }

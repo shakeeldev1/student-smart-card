@@ -1,9 +1,13 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'crypto';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, MoreThan, Repository } from 'typeorm';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
@@ -141,5 +145,51 @@ export class TokenService {
       { userId, revokedAt: IsNull() },
       { revokedAt: new Date() },
     );
+  }
+
+  async listActiveSessions(): Promise<
+    Array<{
+      id: string;
+      userId: string;
+      userName: string;
+      userEmail: string;
+      userRole: string;
+      userAgent: string | null;
+      ipAddress: string | null;
+      createdAt: Date;
+      expiresAt: Date;
+    }>
+  > {
+    const sessions = await this.refreshTokenRepository.find({
+      where: { revokedAt: IsNull(), expiresAt: MoreThan(new Date()) },
+      relations: { user: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    return sessions.map((session) => ({
+      id: session.id,
+      userId: session.userId,
+      userName: session.user.name,
+      userEmail: session.user.email,
+      userRole: session.user.role,
+      userAgent: session.userAgent,
+      ipAddress: session.ipAddress,
+      createdAt: session.createdAt,
+      expiresAt: session.expiresAt,
+    }));
+  }
+
+  async revokeSession(id: string): Promise<void> {
+    const session = await this.refreshTokenRepository.findOne({
+      where: { id },
+    });
+    if (!session) {
+      throw new NotFoundException('Session not found');
+    }
+    if (!session.revokedAt) {
+      await this.refreshTokenRepository.update(id, {
+        revokedAt: new Date(),
+      });
+    }
   }
 }
