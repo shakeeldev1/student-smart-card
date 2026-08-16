@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,6 +14,10 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { InstitutionsService } from '../institutions/institutions.service';
 import { CardsService } from '../cards/cards.service';
+import {
+  EMAIL_SERVICE,
+  type EmailProvider,
+} from '../email/interfaces/email-provider.interface';
 import { UserRole } from '../users/enums/user-role.enum';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { ApplicationStatus } from './enums/application-status.enum';
@@ -30,6 +35,8 @@ export class StudentsService {
     private readonly studentsRepository: Repository<Student>,
     private readonly institutionsService: InstitutionsService,
     private readonly cardsService: CardsService,
+    @Inject(EMAIL_SERVICE)
+    private readonly emailService: EmailProvider,
   ) {}
 
   async create(
@@ -108,7 +115,30 @@ export class StudentsService {
       institutionId,
       registeredByUserId: currentUser.sub,
     });
-    return this.studentsRepository.save(student);
+    const saved = await this.studentsRepository.save(student);
+
+    // Generate setup token and send email
+    if (saved.email) {
+      await this.sendSetupEmail(saved);
+    }
+
+    return saved;
+  }
+
+  private async sendSetupEmail(student: Student): Promise<void> {
+    const setupToken = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    
+    student.setupToken = setupToken;
+    student.setupTokenExpiresAt = expiresAt;
+    await this.studentsRepository.save(student);
+
+    const setupLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/student-setup?token=${setupToken}`;
+    await this.emailService.sendStudentSetupEmail(
+      student.email!,
+      student.fullName,
+      setupLink,
+    );
   }
 
   async findAllForUser(

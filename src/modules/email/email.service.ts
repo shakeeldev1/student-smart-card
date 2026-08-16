@@ -109,4 +109,27 @@ export class NodemailerEmailService implements EmailProvider, OnModuleInit {
       `,
     });
   }
+
+  async sendStudentSetupEmail(
+    to: string,
+    studentName: string,
+    setupLink: string,
+  ): Promise<void> {
+    await this.sendMail({
+      to,
+      subject: 'Complete your Student Smart Card account setup',
+      text: `Hello ${studentName},\n\nWelcome to Student Smart Card!\n\nTo complete your account setup and set your password, please click the link below:\n\n${setupLink}\n\nThis link will expire in 7 days. If you did not request this, please ignore this email.`,
+      html: `
+        <p>Hello ${studentName},</p>
+        <p>Welcome to <strong>Student Smart Card</strong>!</p>
+        <p>To complete your account setup and set your password, please click the button below:</p>
+        <p style="margin:30px 0;">
+          <a href="${setupLink}" style="background-color:#C9A84C;color:#0A1628;padding:12px 30px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+            Set Your Password
+          </a>
+        </p>
+        <p style="color:#666;font-size:12px;">This link will expire in 7 days. If you did not request this, please ignore this email.</p>
+      `,
+    });
+  }
 }

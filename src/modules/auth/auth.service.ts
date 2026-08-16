@@ -4,11 +4,14 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/enums/user-role.enum';
 import { InstitutionsService } from '../institutions/institutions.service';
@@ -28,6 +31,8 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SetupStudentAccountDto } from './dto/setup-student-account.dto';
+import { Student } from '../students/entities/student.entity';
 
 @Injectable()
 export class AuthService {
@@ -39,6 +44,8 @@ export class AuthService {
     @Inject(EMAIL_SERVICE) private readonly emailService: EmailProvider,
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
+    @InjectRepository(Student)
+    private readonly studentsRepository: Repository<Student>,
   ) {}
 
   private hashPassword(password: string): Promise<string> {
@@ -288,5 +295,55 @@ export class AuthService {
     }
 
     return base;
+  }
+
+  async setupStudentAccount(dto: SetupStudentAccountDto) {
+    const student = await this.studentsRepository.findOne({
+      where: { setupToken: dto.token },
+    });
+
+    if (!student) {
+      throw new BadRequestException('Invalid or expired setup token');
+    }
+
+    if (!student.setupTokenExpiresAt || student.setupTokenExpiresAt < new Date()) {
+      throw new BadRequestException('Setup token has expired');
+    }
+
+    if (student.userId) {
+      throw new BadRequestException('Account already set up');
+    }
+
+    // Create user account for student
+    const passwordHash = await this.hashPassword(dto.password);
+    const userEntity = this.usersService.create({
+      email: student.email!,
+      passwordHash,
+      name: student.fullName,
+      role: UserRole.STUDENT,
+      emailVerified: true,
+    });
+    const user = await this.usersService.save(userEntity);
+
+    // Link student to user
+    student.userId = user.id;
+    student.setupToken = null;
+    student.setupTokenExpiresAt = null;
+    await this.studentsRepository.save(student);
+
+    // Generate tokens
+    const tokens = await this.tokenService.issueTokenPair(user);
+
+    return {
+      message: 'Account setup successful',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
   }
 }

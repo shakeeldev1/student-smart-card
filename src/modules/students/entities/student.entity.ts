@@ -134,6 +134,20 @@ export class Student {
   @OneToOne(() => Card, (card) => card.student)
   card?: Card;
 
+  @Column({ type: 'varchar', nullable: true })
+  setupToken: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  setupTokenExpiresAt: Date | null;
+
+  @Index()
+  @Column({ type: 'uuid', nullable: true })
+  userId: string | null;
+
+  @OneToOne(() => User, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'userId' })
+  user?: User;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

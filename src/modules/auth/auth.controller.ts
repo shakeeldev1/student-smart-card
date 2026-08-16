@@ -21,6 +21,7 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SetupStudentAccountDto } from './dto/setup-student-account.dto';
 import { RequestMeta } from './token.service';
 
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
@@ -93,6 +94,13 @@ export class AuthController {
   @Throttle(AUTH_THROTTLE)
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Post('setup-student')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(AUTH_THROTTLE)
+  setupStudentAccount(@Body() dto: SetupStudentAccountDto) {
+    return this.authService.setupStudentAccount(dto);
   }
 
   @Get('me')

@@ -15,6 +15,11 @@ export interface EmailProvider {
     cardNumber: string,
     code: string,
   ): Promise<void>;
+  sendStudentSetupEmail(
+    to: string,
+    studentName: string,
+    setupLink: string,
+  ): Promise<void>;
   sendMail(options: SendMailOptions): Promise<void>;
 }
 
