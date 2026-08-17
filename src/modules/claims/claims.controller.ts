@@ -1,10 +1,19 @@
-import { Controller, Post, Get, Body, UseGuards, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Body,
+  UseGuards,
+  Param,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ClaimsService } from './claims.service';
 import { CreateClaimDto } from './dto/create-claim.dto';
+import { UpdateClaimStatusDto } from './dto/update-claim-status.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { User } from '../users/entities/user.entity';
 
@@ -27,7 +36,7 @@ export class ClaimsController {
   @Roles(UserRole.PARENT, UserRole.OPERATOR, UserRole.EFU, UserRole.ADMIN)
   async getClaims(@CurrentUser() user: User) {
     if (user.role === UserRole.PARENT) {
-      return this.claimsService.getClaimsByStudent(user.id);
+      return this.claimsService.getClaimsForParent(user.id);
     }
     return this.claimsService.getAllClaims();
   }
@@ -40,8 +49,18 @@ export class ClaimsController {
     @Param('claimId') claimId: string,
   ) {
     if (user.role === UserRole.PARENT) {
-      return this.claimsService.getClaimById(claimId, user.id);
+      return this.claimsService.getClaimByIdForParent(claimId, user.id);
     }
     return this.claimsService.getClaimByIdNoAuth(claimId);
+  }
+
+  @Patch(':claimId/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OPERATOR, UserRole.EFU, UserRole.ADMIN)
+  async updateStatus(
+    @Param('claimId') claimId: string,
+    @Body() dto: UpdateClaimStatusDto,
+  ) {
+    return this.claimsService.updateStatus(claimId, dto.status, dto.notes);
   }
 }

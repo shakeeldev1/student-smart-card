@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Claim } from './entities/claim.entity';
 import { CreateClaimDto } from './dto/create-claim.dto';
 import { Card } from '../cards/entities/card.entity';
+import { ClaimStatus } from './enums/claim-status.enum';
 
 @Injectable()
 export class ClaimsService {
@@ -14,7 +15,7 @@ export class ClaimsService {
     private readonly cardsRepository: Repository<Card>,
   ) {}
 
-  async createClaim(studentId: string, createClaimDto: CreateClaimDto): Promise<Claim> {
+  async createClaim(parentUserId: string, createClaimDto: CreateClaimDto): Promise<Claim> {
     const card = await this.cardsRepository.findOne({
       where: { cardNumber: createClaimDto.cardNumber },
       relations: { student: true },
@@ -24,12 +25,12 @@ export class ClaimsService {
       throw new NotFoundException('Card not found');
     }
 
-    if (card.studentId !== studentId) {
+    if (card.student.registeredByUserId !== parentUserId) {
       throw new NotFoundException('This card does not belong to you');
     }
 
     const claim = this.claimsRepository.create({
-      studentId,
+      studentId: card.studentId,
       cardNumber: createClaimDto.cardNumber,
       claimType: createClaimDto.claimType,
       dateOfDeath: createClaimDto.dateOfDeath ? new Date(createClaimDto.dateOfDeath) : null,
@@ -41,17 +42,17 @@ export class ClaimsService {
     return this.claimsRepository.save(claim);
   }
 
-  async getClaimsByStudent(studentId: string): Promise<Claim[]> {
+  async getClaimsForParent(parentUserId: string): Promise<Claim[]> {
     return this.claimsRepository.find({
-      where: { studentId },
+      where: { student: { registeredByUserId: parentUserId } },
       relations: { student: true },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async getClaimById(claimId: string, studentId: string): Promise<Claim> {
+  async getClaimByIdForParent(claimId: string, parentUserId: string): Promise<Claim> {
     const claim = await this.claimsRepository.findOne({
-      where: { id: claimId, studentId },
+      where: { id: claimId, student: { registeredByUserId: parentUserId } },
       relations: { student: true },
     });
 
@@ -80,5 +81,18 @@ export class ClaimsService {
       relations: { student: true },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async updateStatus(
+    claimId: string,
+    status: ClaimStatus,
+    notes?: string,
+  ): Promise<Claim> {
+    const claim = await this.getClaimByIdNoAuth(claimId);
+    claim.status = status;
+    if (notes !== undefined) {
+      claim.notes = notes;
+    }
+    return this.claimsRepository.save(claim);
   }
 }
