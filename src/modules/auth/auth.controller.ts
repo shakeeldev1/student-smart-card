@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -8,9 +9,14 @@ import {
   Patch,
   Post,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import type { Multer } from 'multer';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -118,6 +124,35 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser('sub') userId: string) {
     return this.authService.getMe(userId);
+  }
+
+  @Patch('me/photo')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowed.includes(file.mimetype)) {
+          cb(
+            new BadRequestException('Only JPG, PNG, and WEBP images are allowed'),
+            false,
+          );
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  updateMyProfilePhoto(
+    @CurrentUser('sub') userId: string,
+    @UploadedFile() file: Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No photo file was provided');
+    }
+    return this.authService.updateMyProfilePhoto(userId, file);
   }
 
   @Get('sessions')

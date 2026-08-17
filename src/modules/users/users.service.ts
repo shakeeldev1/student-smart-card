@@ -40,6 +40,7 @@ const SAFE_USER_FIELDS = [
   'user.role',
   'user.emailVerified',
   'user.isActive',
+  'user.profilePhotoUrl',
   'user.createdAt',
   'user.updatedAt',
 ];
@@ -157,6 +158,21 @@ export class UsersService {
     }
 
     return this.toSafeUser(await this.usersRepository.save(user));
+  }
+
+  async updateProfilePhoto(
+    id: string,
+    photo: { url: string; publicId: string },
+  ): Promise<{ previousPublicId: string | null; profilePhotoUrl: string }> {
+    const user = await this.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const previousPublicId = user.profilePhotoPublicId;
+    user.profilePhotoUrl = photo.url;
+    user.profilePhotoPublicId = photo.publicId;
+    await this.usersRepository.save(user);
+    return { previousPublicId, profilePhotoUrl: photo.url };
   }
 
   async updateRole(

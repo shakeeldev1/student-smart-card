@@ -35,6 +35,12 @@ export class User {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
+  @Column({ type: 'varchar', nullable: true })
+  profilePhotoUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  profilePhotoPublicId: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

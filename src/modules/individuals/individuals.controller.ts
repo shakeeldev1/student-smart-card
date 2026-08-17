@@ -20,6 +20,7 @@ import {
   RejectIndividualApplicationDto,
   RequestChangesIndividualApplicationDto,
 } from './dto/review-individual-application.dto';
+import { VerifyIndividualCardDto } from './dto/verify-individual-card.dto';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
 
 @Controller('individuals')
@@ -49,6 +50,21 @@ export class IndividualsController {
     @Body() dto: UpdateIndividualApplicationDto,
   ) {
     return this.individualsService.updateMine(userId, dto);
+  }
+
+  @Post('me/card/send-verification-email')
+  @Roles(UserRole.INDIVIDUAL)
+  sendCardVerificationEmail(@CurrentUser('sub') userId: string) {
+    return this.individualsService.sendCardVerificationEmail(userId);
+  }
+
+  @Post('me/card/verify')
+  @Roles(UserRole.INDIVIDUAL)
+  verifyCard(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: VerifyIndividualCardDto,
+  ) {
+    return this.individualsService.verifyCard(userId, dto.code);
   }
 
   @Get()

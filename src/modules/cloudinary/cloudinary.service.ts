@@ -66,4 +66,15 @@ export class CloudinaryService {
       uploadStream.end(buffer);
     });
   }
+
+  async destroy(publicId: string): Promise<void> {
+    if (!this.configured) {
+      return;
+    }
+    try {
+      await cloudinary.uploader.destroy(publicId);
+    } catch (error) {
+      this.logger.warn(`Failed to delete Cloudinary asset ${publicId}: ${error}`);
+    }
+  }
 }

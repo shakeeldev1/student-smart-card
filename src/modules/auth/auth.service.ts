@@ -32,6 +32,8 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SetupStudentAccountDto } from './dto/setup-student-account.dto';
 import { Student } from '../students/entities/student.entity';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import type { Multer } from 'multer';
 
 @Injectable()
 export class AuthService {
@@ -45,6 +47,7 @@ export class AuthService {
     private readonly config: ConfigService,
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   private hashPassword(password: string): Promise<string> {
@@ -289,6 +292,7 @@ export class AuthService {
       role: user.role,
       phone: user.phone,
       emailVerified: user.emailVerified,
+      profilePhotoUrl: user.profilePhotoUrl,
     };
 
     if (user.role === UserRole.SCHOOL) {
@@ -308,6 +312,23 @@ export class AuthService {
     }
 
     return base;
+  }
+
+  async updateMyProfilePhoto(userId: string, file: Multer.File) {
+    const uploaded = await this.cloudinaryService.uploadBuffer(
+      file.buffer,
+      'student-smart-card/profile-photos',
+      file.originalname,
+    );
+
+    const { previousPublicId, profilePhotoUrl } =
+      await this.usersService.updateProfilePhoto(userId, uploaded);
+
+    if (previousPublicId) {
+      await this.cloudinaryService.destroy(previousPublicId);
+    }
+
+    return { profilePhotoUrl };
   }
 
   async setupStudentAccount(dto: SetupStudentAccountDto) {

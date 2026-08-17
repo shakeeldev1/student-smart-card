@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,6 +14,10 @@ import { CreateIndividualApplicationDto } from './dto/create-individual-applicat
 import { UpdateIndividualApplicationDto } from './dto/update-individual-application.dto';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
 import { CardStatus } from '../cards/enums/card-status.enum';
+import {
+  EMAIL_SERVICE,
+  type EmailProvider,
+} from '../email/interfaces/email-provider.interface';
 
 export interface IndividualFilters {
   status?: ApplicationStatus;
@@ -37,6 +42,8 @@ export class IndividualsService {
     private readonly individualsRepository: Repository<Individual>,
     @InjectRepository(IndividualCard)
     private readonly cardsRepository: Repository<IndividualCard>,
+    @Inject(EMAIL_SERVICE)
+    private readonly emailService: EmailProvider,
   ) {}
 
   async create(
@@ -235,5 +242,57 @@ export class IndividualsService {
     });
     saved.card = await this.cardsRepository.save(card);
     return saved;
+  }
+
+  async sendCardVerificationEmail(userId: string): Promise<{ message: string }> {
+    const individual = await this.findMine(userId);
+    if (!individual.card) {
+      throw new BadRequestException('No card has been issued yet');
+    }
+    if (!individual.email) {
+      throw new BadRequestException(
+        'An email address is required before card verification can be sent',
+      );
+    }
+
+    const code = randomBytes(4).toString('hex').toUpperCase();
+    const card = individual.card;
+    card.verificationCode = code;
+    card.verificationCodeExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    await this.cardsRepository.save(card);
+
+    await this.emailService.sendCardVerificationEmail(
+      individual.email,
+      individual.fullName,
+      card.cardNumber,
+      code,
+    );
+
+    return { message: 'Verification email sent successfully' };
+  }
+
+  async verifyCard(userId: string, code: string): Promise<{ valid: boolean }> {
+    const individual = await this.findMine(userId);
+    const card = individual.card;
+
+    if (!card || !card.verificationCode || !card.verificationCodeExpiresAt) {
+      return { valid: false };
+    }
+
+    if (new Date() > new Date(card.verificationCodeExpiresAt)) {
+      return { valid: false };
+    }
+
+    const isValid = card.verificationCode === code.trim().toUpperCase();
+    if (!isValid) {
+      return { valid: false };
+    }
+
+    card.status = CardStatus.ACTIVE;
+    card.verificationCode = null;
+    card.verificationCodeExpiresAt = null;
+    await this.cardsRepository.save(card);
+
+    return { valid: true };
   }
 }

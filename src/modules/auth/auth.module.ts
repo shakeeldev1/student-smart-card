@@ -7,6 +7,7 @@ import { RefreshToken } from './entities/refresh-token.entity';
 import { Student } from '../students/entities/student.entity';
 import { UsersModule } from '../users/users.module';
 import { InstitutionsModule } from '../institutions/institutions.module';
+import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { OtpService } from './otp.service';
 import { TokenService } from './token.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -18,6 +19,7 @@ import { AuthController } from './auth.controller';
     TypeOrmModule.forFeature([EmailOtp, RefreshToken, Student]),
     UsersModule,
     InstitutionsModule,
+    CloudinaryModule,
     PassportModule,
     JwtModule.register({}),
   ],
