@@ -54,6 +54,12 @@ export class AuthController {
     return this.authService.registerSchool(dto);
   }
 
+  @Post('register/individual')
+  @Throttle(AUTH_THROTTLE)
+  registerIndividual(@Body() dto: RegisterParentDto) {
+    return this.authService.registerIndividual(dto);
+  }
+
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   @Throttle(AUTH_THROTTLE)

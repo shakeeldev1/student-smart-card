@@ -88,6 +88,39 @@ export class AuthService {
     };
   }
 
+  async registerIndividual(dto: RegisterParentDto) {
+    const existing = await this.usersService.findByEmail(dto.email);
+    if (existing) {
+      throw new ConflictException('Email already registered');
+    }
+
+    const passwordHash = await this.hashPassword(dto.password);
+    const user = this.usersService.create({
+      email: dto.email,
+      passwordHash,
+      name: dto.name,
+      role: UserRole.INDIVIDUAL,
+      phone: dto.phone ?? null,
+    });
+    const saved = await this.usersService.save(user);
+
+    const code = await this.otpService.generate(
+      saved.id,
+      OtpPurpose.EMAIL_VERIFICATION,
+    );
+    await this.emailService.sendOtpEmail(
+      saved.email,
+      code,
+      OtpPurpose.EMAIL_VERIFICATION,
+    );
+
+    return {
+      userId: saved.id,
+      email: saved.email,
+      message: 'Verification code sent',
+    };
+  }
+
   async registerSchool(dto: RegisterSchoolDto) {
     const existingUser = await this.usersService.findByEmail(dto.email);
     if (existingUser) {

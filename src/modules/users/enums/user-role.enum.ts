@@ -5,4 +5,5 @@ export enum UserRole {
   OPERATOR = 'operator',
   EFU = 'efu',
   ADMIN = 'admin',
+  INDIVIDUAL = 'individual',
 }
