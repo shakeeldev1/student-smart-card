@@ -37,7 +37,7 @@ export class CardsController {
       return { valid: false };
     }
 
-    const card = await this.cardsService.findByCardNumber(body.cardNumber);
+    const card = await this.cardsService.lookupByCardNumber(body.cardNumber);
     if (!card) {
       return { valid: false };
     }
@@ -47,15 +47,15 @@ export class CardsController {
       cardNumber: card.cardNumber,
       status: card.status,
       eligibleForDiscount: card.status === CardStatus.ACTIVE,
-      studentName: card.student.fullName,
-      className: card.student.className,
+      studentName: card.holderName,
+      className: card.className,
       issuedAt: card.issuedAt,
     };
   }
 
   @Get('verify/:cardNumber')
   async verifyByNumber(@Param('cardNumber') cardNumber: string) {
-    const card = await this.cardsService.findByCardNumber(cardNumber);
+    const card = await this.cardsService.lookupByCardNumber(cardNumber);
     if (!card) {
       return { valid: false };
     }
@@ -65,8 +65,8 @@ export class CardsController {
       cardNumber: card.cardNumber,
       status: card.status,
       eligibleForDiscount: card.status === CardStatus.ACTIVE,
-      studentName: card.student.fullName,
-      className: card.student.className,
+      studentName: card.holderName,
+      className: card.className,
       issuedAt: card.issuedAt,
     };
   }

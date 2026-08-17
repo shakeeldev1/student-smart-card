@@ -8,17 +8,28 @@ import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { Inject } from '@nestjs/common';
 import { Card } from './entities/card.entity';
+import { IndividualCard } from '../individuals/entities/individual-card.entity';
 import { CardStatus } from './enums/card-status.enum';
 import {
   EMAIL_SERVICE,
   type EmailProvider,
 } from '../email/interfaces/email-provider.interface';
 
+export interface CardLookupResult {
+  cardNumber: string;
+  status: CardStatus;
+  holderName: string;
+  className: string | null;
+  issuedAt: Date;
+}
+
 @Injectable()
 export class CardsService {
   constructor(
     @InjectRepository(Card)
     private readonly cardsRepository: Repository<Card>,
+    @InjectRepository(IndividualCard)
+    private readonly individualCardsRepository: Repository<IndividualCard>,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
   ) {}
@@ -71,33 +82,68 @@ export class CardsService {
     return { message: 'Verification email sent successfully' };
   }
 
-  async requestVerificationCodeByCardNumber(
-    cardNumber: string,
-  ): Promise<{ message: string }> {
-    const card = await this.cardsRepository.findOne({
+  private async findAnyCardByNumber(cardNumber: string): Promise<
+    | { kind: 'student'; card: Card }
+    | { kind: 'individual'; card: IndividualCard }
+    | null
+  > {
+    const studentCard = await this.cardsRepository.findOne({
       where: { cardNumber },
       relations: { student: true },
     });
+    if (studentCard) {
+      return { kind: 'student', card: studentCard };
+    }
 
-    if (!card) {
+    const individualCard = await this.individualCardsRepository.findOne({
+      where: { cardNumber },
+      relations: { individual: true },
+    });
+    if (individualCard) {
+      return { kind: 'individual', card: individualCard };
+    }
+
+    return null;
+  }
+
+  async requestVerificationCodeByCardNumber(
+    cardNumber: string,
+  ): Promise<{ message: string }> {
+    const match = await this.findAnyCardByNumber(cardNumber);
+
+    if (!match) {
       throw new NotFoundException('Card not found');
     }
 
-    if (!card.student?.email) {
+    const holderEmail =
+      match.kind === 'student'
+        ? match.card.student?.email
+        : match.card.individual?.email;
+    const holderName =
+      match.kind === 'student'
+        ? match.card.student?.fullName
+        : match.card.individual?.fullName;
+
+    if (!holderEmail) {
       throw new BadRequestException(
         'No email address on file for this card',
       );
     }
 
     const code = randomBytes(4).toString('hex').toUpperCase();
-    card.verificationCode = code;
-    card.verificationCodeExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
-    await this.cardsRepository.save(card);
+    match.card.verificationCode = code;
+    match.card.verificationCodeExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    if (match.kind === 'student') {
+      await this.cardsRepository.save(match.card);
+    } else {
+      await this.individualCardsRepository.save(match.card);
+    }
 
     await this.emailService.sendCardVerificationEmail(
-      card.student.email,
-      card.student.fullName,
-      card.cardNumber,
+      holderEmail,
+      holderName ?? '',
+      match.card.cardNumber,
       code,
     );
 
@@ -105,15 +151,13 @@ export class CardsService {
   }
 
   async verifyCard(cardNumber: string, code: string): Promise<{ valid: boolean }> {
-    const card = await this.cardsRepository.findOne({
-      where: { cardNumber },
-      relations: { student: true },
-    });
+    const match = await this.findAnyCardByNumber(cardNumber);
 
-    if (!card) {
+    if (!match) {
       return { valid: false };
     }
 
+    const { card } = match;
     if (!card.verificationCode || !card.verificationCodeExpiresAt) {
       return { valid: false };
     }
@@ -130,7 +174,12 @@ export class CardsService {
     card.status = CardStatus.ACTIVE;
     card.verificationCode = null;
     card.verificationCodeExpiresAt = null;
-    await this.cardsRepository.save(card);
+
+    if (match.kind === 'student') {
+      await this.cardsRepository.save(card);
+    } else {
+      await this.individualCardsRepository.save(card);
+    }
 
     return { valid: true };
   }
@@ -140,5 +189,30 @@ export class CardsService {
       where: { cardNumber },
       relations: { student: true },
     });
+  }
+
+  async lookupByCardNumber(cardNumber: string): Promise<CardLookupResult | null> {
+    const match = await this.findAnyCardByNumber(cardNumber);
+    if (!match) {
+      return null;
+    }
+
+    if (match.kind === 'student') {
+      return {
+        cardNumber: match.card.cardNumber,
+        status: match.card.status,
+        holderName: match.card.student?.fullName ?? '',
+        className: match.card.student?.className ?? null,
+        issuedAt: match.card.issuedAt,
+      };
+    }
+
+    return {
+      cardNumber: match.card.cardNumber,
+      status: match.card.status,
+      holderName: match.card.individual?.fullName ?? '',
+      className: null,
+      issuedAt: match.card.issuedAt,
+    };
   }
 }
