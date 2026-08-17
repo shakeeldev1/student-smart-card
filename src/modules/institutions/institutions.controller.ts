@@ -43,12 +43,19 @@ export class InstitutionsController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EFU)
   findAllAdmin(
     @Query('status') status?: InstitutionApprovalStatus,
     @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
-    return this.institutionsService.findAllAdmin({ status, search });
+    return this.institutionsService.findAllAdmin({
+      status,
+      search,
+      startDate,
+      endDate,
+    });
   }
 
   @Patch('me')

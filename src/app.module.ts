@@ -18,6 +18,7 @@ import { ClaimsModule } from './modules/claims/claims.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { ClassesModule } from './modules/classes/classes.module';
 import { IndividualsModule } from './modules/individuals/individuals.module';
+import { EfuModule } from './modules/efu/efu.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { IndividualsModule } from './modules/individuals/individuals.module';
     AdminModule,
     ClassesModule,
     IndividualsModule,
+    EfuModule,
   ],
   controllers: [AppController],
   providers: [

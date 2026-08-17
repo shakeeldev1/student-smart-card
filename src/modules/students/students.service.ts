@@ -25,6 +25,7 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { ApplicationStatus } from './enums/application-status.enum';
 import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
+import { parseDateRange } from '../../common/utils/date-range.util';
 
 export interface StudentFilters {
   status?: ApplicationStatus;
@@ -32,6 +33,8 @@ export interface StudentFilters {
   search?: string;
   institutionId?: string;
   classId?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 @Injectable()
@@ -191,7 +194,9 @@ export class StudentsService {
   ): Promise<Student[]> {
     const qb = this.studentsRepository
       .createQueryBuilder('student')
-      .leftJoinAndSelect('student.card', 'card');
+      .leftJoinAndSelect('student.card', 'card')
+      .leftJoinAndSelect('student.institution', 'institution')
+      .leftJoinAndSelect('student.schoolClass', 'schoolClass');
 
     if (currentUser.role === UserRole.SCHOOL) {
       const institution = await this.institutionsService.findByOwnerUserId(
@@ -205,10 +210,22 @@ export class StudentsService {
       qb.andWhere('student.registeredByUserId = :userId', {
         userId: currentUser.sub,
       });
-    } else if (currentUser.role === UserRole.ADMIN && filters.institutionId) {
+    } else if (
+      (currentUser.role === UserRole.ADMIN ||
+        currentUser.role === UserRole.EFU) &&
+      filters.institutionId
+    ) {
       qb.andWhere('student.institutionId = :institutionId', {
         institutionId: filters.institutionId,
       });
+    }
+
+    const { from, to } = parseDateRange(filters.startDate, filters.endDate);
+    if (from) {
+      qb.andWhere('student.createdAt >= :fromDate', { fromDate: from });
+    }
+    if (to) {
+      qb.andWhere('student.createdAt <= :toDate', { toDate: to });
     }
 
     if (filters.classId) {

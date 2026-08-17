@@ -31,6 +31,7 @@ export class ClassesController {
   }
 
   @Get()
+  @Roles(UserRole.SCHOOL, UserRole.ADMIN, UserRole.EFU)
   findAll(
     @CurrentUser() user: JwtPayload,
     @Query('institutionId') institutionId?: string,

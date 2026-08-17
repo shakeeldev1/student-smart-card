@@ -6,10 +6,13 @@ import { Student } from '../students/entities/student.entity';
 import { InstitutionApprovalStatus } from './enums/institution-approval-status.enum';
 import { InstitutionType } from './enums/institution-type.enum';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
+import { parseDateRange } from '../../common/utils/date-range.util';
 
 export interface InstitutionAdminFilters {
   status?: InstitutionApprovalStatus;
   search?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface CreateInstitutionInput {
@@ -113,6 +116,14 @@ export class InstitutionsService {
         '(institution.name ILIKE :search OR institution.registrationNumber ILIKE :search OR institution.city ILIKE :search)',
         { search: `%${filters.search}%` },
       );
+    }
+
+    const { from, to } = parseDateRange(filters.startDate, filters.endDate);
+    if (from) {
+      qb.andWhere('institution.createdAt >= :fromDate', { fromDate: from });
+    }
+    if (to) {
+      qb.andWhere('institution.createdAt <= :toDate', { toDate: to });
     }
 
     qb.orderBy('institution.createdAt', 'DESC');

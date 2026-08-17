@@ -8,6 +8,7 @@ import { InstitutionApprovalStatus } from '../institutions/enums/institution-app
 import { Student } from '../students/entities/student.entity';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
 import { Claim } from '../claims/entities/claim.entity';
+import { toCsv } from '../../common/utils/csv.util';
 
 @Injectable()
 export class AdminService {
@@ -57,29 +58,13 @@ export class AdminService {
     };
   }
 
-  private toCsv(headers: string[], rows: Array<Array<string | number | null | undefined>>): string {
-    const escape = (value: string | number | null | undefined): string => {
-      const str = value === null || value === undefined ? '' : String(value);
-      if (/[",\n]/.test(str)) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-
-    const lines = [headers.map(escape).join(',')];
-    for (const row of rows) {
-      lines.push(row.map(escape).join(','));
-    }
-    return lines.join('\n');
-  }
-
   async getStudentsReportCsv(): Promise<string> {
     const students = await this.studentsRepository.find({
       relations: { institution: true },
       order: { createdAt: 'DESC' },
     });
 
-    return this.toCsv(
+    return toCsv(
       [
         'Full Name',
         'B-Form Number',
@@ -123,7 +108,7 @@ export class AdminService {
       counts.map((row) => [row.institutionId, Number(row.count)]),
     );
 
-    return this.toCsv(
+    return toCsv(
       [
         'Name',
         'Registration Number',
@@ -157,7 +142,7 @@ export class AdminService {
       order: { createdAt: 'DESC' },
     });
 
-    return this.toCsv(
+    return toCsv(
       [
         'Claim Number',
         'Card Number',
@@ -222,6 +207,6 @@ export class AdminService {
       ]),
     ];
 
-    return this.toCsv(['Type', 'Name', 'Reference', 'Submitted At'], rows);
+    return toCsv(['Type', 'Name', 'Reference', 'Submitted At'], rows);
   }
 }
