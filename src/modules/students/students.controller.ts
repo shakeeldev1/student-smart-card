@@ -20,6 +20,7 @@ import type { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
+import { UpdateOwnStudentProfileDto } from './dto/update-own-student-profile.dto';
 import {
   RejectStudentDto,
   RequestChangesStudentDto,
@@ -116,6 +117,16 @@ export class StudentsController {
   @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   issueCertificate(@Param('id') id: string) {
     return this.studentsService.issueCertificate(id);
+  }
+
+  @Patch('me')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.STUDENT)
+  updateMine(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: UpdateOwnStudentProfileDto,
+  ) {
+    return this.studentsService.updateOwnProfile(userId, dto);
   }
 
   @Patch(':id')

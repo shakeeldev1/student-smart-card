@@ -13,6 +13,7 @@ import { randomBytes } from 'crypto';
 import { Student } from './entities/student.entity';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
+import { UpdateOwnStudentProfileDto } from './dto/update-own-student-profile.dto';
 import { InstitutionsService } from '../institutions/institutions.service';
 import { CardsService } from '../cards/cards.service';
 import {
@@ -232,6 +233,15 @@ export class StudentsService {
     dto: UpdateStudentDto,
   ): Promise<Student> {
     const student = await this.findOneForUser(currentUser, id);
+    Object.assign(student, dto);
+    return this.studentsRepository.save(student);
+  }
+
+  async updateOwnProfile(
+    userId: string,
+    dto: UpdateOwnStudentProfileDto,
+  ): Promise<Student> {
+    const student = await this.findByUserId(userId);
     Object.assign(student, dto);
     return this.studentsRepository.save(student);
   }

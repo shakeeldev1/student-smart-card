@@ -159,16 +159,23 @@ export class AdminService {
 
     return this.toCsv(
       [
+        'Claim Number',
         'Card Number',
         'Student Name',
         'Claim Type',
         'Status',
         'Date of Death',
         'Date of Accidental Disability',
+        'Place of Incident',
+        'Claimant Name',
+        'Claimant Relationship',
+        'Claimant CNIC',
+        'Claimant Contact',
         'Notes',
         'Submitted At',
       ],
       claims.map((c) => [
+        c.claimNumber ?? '',
         c.cardNumber,
         c.student?.fullName ?? '',
         c.claimType,
@@ -177,6 +184,11 @@ export class AdminService {
         c.dateOfAccidentalDisability
           ? new Date(c.dateOfAccidentalDisability).toISOString()
           : '',
+        c.placeOfIncident ?? '',
+        c.claimantName ?? '',
+        c.claimantRelationship ?? '',
+        c.claimantCnic ?? '',
+        c.claimantContactNumber ?? '',
         c.notes ?? '',
         c.createdAt.toISOString(),
       ]),

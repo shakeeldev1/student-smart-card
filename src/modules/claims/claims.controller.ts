@@ -17,39 +17,50 @@ import { UpdateClaimStatusDto } from './dto/update-claim-status.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { User } from '../users/entities/user.entity';
 
+const OWNER_ROLES = [UserRole.PARENT, UserRole.STUDENT];
+
 @Controller('claims')
 export class ClaimsController {
   constructor(private readonly claimsService: ClaimsService) {}
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PARENT)
+  @Roles(...OWNER_ROLES)
   async createClaim(
     @CurrentUser() user: User,
     @Body() createClaimDto: CreateClaimDto,
   ) {
-    return this.claimsService.createClaim(user.id, createClaimDto);
+    return this.claimsService.createClaim(
+      { id: user.id, role: user.role },
+      createClaimDto,
+    );
   }
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.OPERATOR, UserRole.EFU, UserRole.ADMIN)
+  @Roles(...OWNER_ROLES, UserRole.OPERATOR, UserRole.EFU, UserRole.ADMIN)
   async getClaims(@CurrentUser() user: User) {
-    if (user.role === UserRole.PARENT) {
-      return this.claimsService.getClaimsForParent(user.id);
+    if (OWNER_ROLES.includes(user.role)) {
+      return this.claimsService.getClaimsForOwner({
+        id: user.id,
+        role: user.role,
+      });
     }
     return this.claimsService.getAllClaims();
   }
 
   @Get(':claimId')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.OPERATOR, UserRole.EFU, UserRole.ADMIN)
+  @Roles(...OWNER_ROLES, UserRole.OPERATOR, UserRole.EFU, UserRole.ADMIN)
   async getClaimById(
     @CurrentUser() user: User,
     @Param('claimId') claimId: string,
   ) {
-    if (user.role === UserRole.PARENT) {
-      return this.claimsService.getClaimByIdForParent(claimId, user.id);
+    if (OWNER_ROLES.includes(user.role)) {
+      return this.claimsService.getClaimByIdForOwner(claimId, {
+        id: user.id,
+        role: user.role,
+      });
     }
     return this.claimsService.getClaimByIdNoAuth(claimId);
   }
