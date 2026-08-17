@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
 } from 'class-validator';
@@ -37,9 +38,16 @@ export class CreateStudentDto {
   @Matches(/^\d{13}$/, { message: 'bFormNumber must be a 13-digit number' })
   bFormNumber: string;
 
+  @IsOptional()
   @IsString()
   @MaxLength(50)
-  className: string;
+  className?: string;
+
+  // When a school registers a student, they select one of their own
+  // classes instead of typing a free-text class name.
+  @IsOptional()
+  @IsUUID()
+  classId?: string;
 
   @IsOptional()
   @IsString()

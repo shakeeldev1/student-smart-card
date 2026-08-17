@@ -54,12 +54,14 @@ export class StudentsController {
     @Query('certificateStatus') certificateStatus?: 'issued' | 'not_issued',
     @Query('search') search?: string,
     @Query('institutionId') institutionId?: string,
+    @Query('classId') classId?: string,
   ) {
     return this.studentsService.findAllForUser(user, {
       status,
       certificateStatus,
       search,
       institutionId,
+      classId,
     });
   }
 

@@ -16,6 +16,7 @@ import { CardsModule } from './modules/cards/cards.module';
 import { InternshipsModule } from './modules/internships/internships.module';
 import { ClaimsModule } from './modules/claims/claims.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { ClassesModule } from './modules/classes/classes.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { AdminModule } from './modules/admin/admin.module';
     InternshipsModule,
     ClaimsModule,
     AdminModule,
+    ClassesModule,
   ],
   controllers: [AppController],
   providers: [

@@ -16,6 +16,7 @@ import { UpdateStudentDto } from './dto/update-student.dto';
 import { UpdateOwnStudentProfileDto } from './dto/update-own-student-profile.dto';
 import { InstitutionsService } from '../institutions/institutions.service';
 import { CardsService } from '../cards/cards.service';
+import { ClassesService } from '../classes/classes.service';
 import {
   EMAIL_SERVICE,
   type EmailProvider,
@@ -30,6 +31,7 @@ export interface StudentFilters {
   certificateStatus?: 'issued' | 'not_issued';
   search?: string;
   institutionId?: string;
+  classId?: string;
 }
 
 @Injectable()
@@ -39,6 +41,7 @@ export class StudentsService {
     private readonly studentsRepository: Repository<Student>,
     private readonly institutionsService: InstitutionsService,
     private readonly cardsService: CardsService,
+    private readonly classesService: ClassesService,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
     private readonly config: ConfigService,
@@ -59,6 +62,8 @@ export class StudentsService {
 
     let institutionId: string | null = null;
     let institutionNameFreeText: string | null = null;
+    let classId: string | null = null;
+    let className = dto.className?.trim() || null;
     let autoApprove = false;
     let consent = {
       consentEnrollment: true,
@@ -80,10 +85,26 @@ export class StudentsService {
       // approved yet still goes through the normal pending queue.
       autoApprove =
         institution.approvalStatus === InstitutionApprovalStatus.APPROVED;
+
+      if (dto.classId) {
+        const schoolClass = await this.classesService.findByIdForOwnership(
+          dto.classId,
+          institution.id,
+        );
+        classId = schoolClass.id;
+        className = schoolClass.name;
+      } else if (!className) {
+        throw new BadRequestException('classId or className is required');
+      }
     } else {
       if (!dto.institutionName?.trim()) {
         throw new BadRequestException(
           'institutionName is required for individual registrations',
+        );
+      }
+      if (!className) {
+        throw new BadRequestException(
+          'className is required for individual registrations',
         );
       }
       if (
@@ -110,7 +131,8 @@ export class StudentsService {
       dateOfBirth: dto.dateOfBirth,
       gender: dto.gender,
       bFormNumber: dto.bFormNumber,
-      className: dto.className,
+      className: className!,
+      classId,
       contactNumber: dto.contactNumber ?? null,
       email: dto.email ?? null,
       guardianName: dto.guardianName,
@@ -187,6 +209,10 @@ export class StudentsService {
       qb.andWhere('student.institutionId = :institutionId', {
         institutionId: filters.institutionId,
       });
+    }
+
+    if (filters.classId) {
+      qb.andWhere('student.classId = :classId', { classId: filters.classId });
     }
 
     if (filters.status) {

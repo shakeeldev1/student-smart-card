@@ -12,6 +12,7 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Institution } from '../../institutions/entities/institution.entity';
 import { Card } from '../../cards/entities/card.entity';
+import { SchoolClass } from '../../classes/entities/school-class.entity';
 import { Gender } from '../enums/gender.enum';
 import { GuardianRelationship } from '../enums/guardian-relationship.enum';
 import { ApplicationStatus } from '../enums/application-status.enum';
@@ -95,6 +96,14 @@ export class Student {
   @ManyToOne(() => Institution, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'institutionId' })
   institution: Institution | null;
+
+  @Index()
+  @Column({ type: 'uuid', nullable: true })
+  classId: string | null;
+
+  @ManyToOne(() => SchoolClass, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'classId' })
+  schoolClass: SchoolClass | null;
 
   @Index()
   @Column({ type: 'uuid' })
