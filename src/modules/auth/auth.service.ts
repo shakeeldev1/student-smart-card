@@ -15,7 +15,6 @@ import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/enums/user-role.enum';
 import { InstitutionsService } from '../institutions/institutions.service';
-import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { OtpService } from './otp.service';
 import { TokenService, RequestMeta } from './token.service';
 import { OtpPurpose } from './enums/otp-purpose.enum';
@@ -221,28 +220,9 @@ export class AuthService {
       });
     }
 
-    if (user.role === UserRole.SCHOOL) {
-      const institution = await this.institutionsService.findByOwnerUserId(
-        user.id,
-      );
-
-      if (
-        institution?.approvalStatus === InstitutionApprovalStatus.PENDING_REVIEW
-      ) {
-        return {
-          status: 'PENDING_APPROVAL',
-          message: 'Your institution is awaiting operational review.',
-        };
-      }
-
-      if (institution?.approvalStatus === InstitutionApprovalStatus.REJECTED) {
-        return {
-          status: 'REJECTED',
-          message: 'Your institution registration was rejected.',
-          reason: institution.rejectionReason,
-        };
-      }
-    }
+    // Schools can always log in and reach their dashboard, regardless of
+    // approval status — the dashboard itself shows pending/rejected status
+    // (via GET /institutions/me) rather than blocking access at login.
 
     const tokens = await this.tokenService.issueTokenPair(user, meta);
     return {
