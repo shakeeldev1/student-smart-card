@@ -15,7 +15,7 @@ import { ClaimsService } from './claims.service';
 import { CreateClaimDto } from './dto/create-claim.dto';
 import { UpdateClaimStatusDto } from './dto/update-claim-status.dto';
 import { UserRole } from '../users/enums/user-role.enum';
-import type { User } from '../users/entities/user.entity';
+import type { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 
 const OWNER_ROLES = [UserRole.PARENT, UserRole.STUDENT];
 
@@ -27,11 +27,11 @@ export class ClaimsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(...OWNER_ROLES)
   async createClaim(
-    @CurrentUser() user: User,
+    @CurrentUser() user: JwtPayload,
     @Body() createClaimDto: CreateClaimDto,
   ) {
     return this.claimsService.createClaim(
-      { id: user.id, role: user.role },
+      { id: user.sub, role: user.role },
       createClaimDto,
     );
   }
@@ -39,10 +39,10 @@ export class ClaimsController {
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(...OWNER_ROLES, UserRole.OPERATOR, UserRole.EFU, UserRole.ADMIN)
-  async getClaims(@CurrentUser() user: User) {
+  async getClaims(@CurrentUser() user: JwtPayload) {
     if (OWNER_ROLES.includes(user.role)) {
       return this.claimsService.getClaimsForOwner({
-        id: user.id,
+        id: user.sub,
         role: user.role,
       });
     }
@@ -53,12 +53,12 @@ export class ClaimsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(...OWNER_ROLES, UserRole.OPERATOR, UserRole.EFU, UserRole.ADMIN)
   async getClaimById(
-    @CurrentUser() user: User,
+    @CurrentUser() user: JwtPayload,
     @Param('claimId') claimId: string,
   ) {
     if (OWNER_ROLES.includes(user.role)) {
       return this.claimsService.getClaimByIdForOwner(claimId, {
-        id: user.id,
+        id: user.sub,
         role: user.role,
       });
     }

@@ -128,6 +128,12 @@ export class IndividualsService {
       );
     }
     Object.assign(individual, dto);
+
+    if (individual.status === ApplicationStatus.CHANGES_REQUESTED) {
+      individual.status = ApplicationStatus.PENDING;
+      individual.reviewNote = null;
+    }
+
     return this.individualsRepository.save(individual);
   }
 

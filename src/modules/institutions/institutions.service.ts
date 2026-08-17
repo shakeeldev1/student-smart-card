@@ -151,6 +151,18 @@ export class InstitutionsService {
     return this.institutionsRepository.save(institution);
   }
 
+  async updateOwn(
+    ownerUserId: string,
+    dto: UpdateInstitutionDto,
+  ): Promise<Institution> {
+    const institution = await this.findByOwnerUserId(ownerUserId);
+    if (!institution) {
+      throw new NotFoundException('No institution found for this account');
+    }
+    Object.assign(institution, dto);
+    return this.institutionsRepository.save(institution);
+  }
+
   async remove(id: string): Promise<{ message: string }> {
     await this.findById(id);
     await this.institutionsRepository.delete(id);

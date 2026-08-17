@@ -51,6 +51,15 @@ export class InstitutionsController {
     return this.institutionsService.findAllAdmin({ status, search });
   }
 
+  @Patch('me')
+  @Roles(UserRole.SCHOOL)
+  updateMine(
+    @CurrentUser('sub') ownerUserId: string,
+    @Body() dto: UpdateInstitutionDto,
+  ) {
+    return this.institutionsService.updateOwn(ownerUserId, dto);
+  }
+
   @Patch(':id/approve')
   @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   approve(@Param('id') id: string, @CurrentUser('sub') operatorId: string) {
