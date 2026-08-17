@@ -11,10 +11,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { mkdirSync } from 'fs';
-import { randomUUID } from 'crypto';
+import { memoryStorage } from 'multer';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import type { Multer } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -30,25 +27,21 @@ import {
 } from './dto/review-internship-application.dto';
 import { InternshipsService } from './internships.service';
 import { InternshipApplicationStatus } from './enums/internship-application-status.enum';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
-const internshipUploadsDir = join(process.cwd(), 'uploads', 'internships');
-
-function ensureUploadsDir() {
-  mkdirSync(internshipUploadsDir, { recursive: true });
-}
-
-function sanitizeFileName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 60) || 'file';
-}
+const CLOUDINARY_FOLDER = 'student-smart-card/internships';
 
 @Controller('internships')
 @UseGuards(JwtAuthGuard)
 export class InternshipsController {
-  constructor(private readonly internshipsService: InternshipsService) {}
+  constructor(
+    private readonly internshipsService: InternshipsService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.SCHOOL)
+  @Roles(UserRole.STUDENT)
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -58,19 +51,7 @@ export class InternshipsController {
         { name: 'recommendationLetterNoc', maxCount: 1 },
       ],
       {
-        storage: diskStorage({
-          destination: (_req, _file, cb) => {
-            ensureUploadsDir();
-            cb(null, internshipUploadsDir);
-          },
-          filename: (_req, file, cb) => {
-            const extension = extname(file.originalname).toLowerCase();
-            const baseName = sanitizeFileName(
-              file.originalname.replace(extension, ''),
-            );
-            cb(null, `${Date.now()}-${randomUUID()}-${baseName}${extension}`);
-          },
-        }),
+        storage: memoryStorage(),
         fileFilter: (_req, file, cb) => {
           const allowed = [
             'image/jpeg',
@@ -95,7 +76,7 @@ export class InternshipsController {
       },
     ),
   )
-  create(
+  async create(
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateInternshipApplicationDto,
     @UploadedFiles()
@@ -120,11 +101,34 @@ export class InternshipsController {
       throw new BadRequestException('All required documents must be uploaded');
     }
 
+    const [photo, studentId, transcript, noc] = await Promise.all([
+      this.cloudinaryService.uploadBuffer(
+        recentPhotograph.buffer,
+        CLOUDINARY_FOLDER,
+        recentPhotograph.originalname,
+      ),
+      this.cloudinaryService.uploadBuffer(
+        studentCardInstitutionId.buffer,
+        CLOUDINARY_FOLDER,
+        studentCardInstitutionId.originalname,
+      ),
+      this.cloudinaryService.uploadBuffer(
+        academicCertificateTranscript.buffer,
+        CLOUDINARY_FOLDER,
+        academicCertificateTranscript.originalname,
+      ),
+      this.cloudinaryService.uploadBuffer(
+        recommendationLetterNoc.buffer,
+        CLOUDINARY_FOLDER,
+        recommendationLetterNoc.originalname,
+      ),
+    ]);
+
     return this.internshipsService.create(user, dto, {
-      recentPhotographPath: `/uploads/internships/${recentPhotograph.filename}`,
-      studentCardInstitutionIdPath: `/uploads/internships/${studentCardInstitutionId.filename}`,
-      academicCertificateTranscriptPath: `/uploads/internships/${academicCertificateTranscript.filename}`,
-      recommendationLetterNocPath: `/uploads/internships/${recommendationLetterNoc.filename}`,
+      recentPhotographPath: photo.url,
+      studentCardInstitutionIdPath: studentId.url,
+      academicCertificateTranscriptPath: transcript.url,
+      recommendationLetterNocPath: noc.url,
     });
   }
 

@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -9,6 +10,7 @@ import {
 } from 'class-validator';
 import { ClaimType } from '../enums/claim-type.enum';
 import { ClaimantRelationship } from '../enums/claimant-relationship.enum';
+import { normalizeDigits } from '../../../common/transforms/normalize-digits.transform';
 
 export class CreateClaimDto {
   @IsString()
@@ -37,6 +39,7 @@ export class CreateClaimDto {
   @IsEnum(ClaimantRelationship)
   claimantRelationship: ClaimantRelationship;
 
+  @Transform(normalizeDigits)
   @Matches(/^\d{13}$/, { message: 'claimantCnic must be a 13-digit number' })
   claimantCnic: string;
 

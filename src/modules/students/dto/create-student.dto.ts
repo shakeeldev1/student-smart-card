@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -10,6 +11,7 @@ import {
 } from 'class-validator';
 import { Gender } from '../enums/gender.enum';
 import { GuardianRelationship } from '../enums/guardian-relationship.enum';
+import { normalizeDigits } from '../../../common/transforms/normalize-digits.transform';
 
 export class CreateStudentDto {
   @IsString()
@@ -31,6 +33,7 @@ export class CreateStudentDto {
   @IsEnum(Gender)
   gender: Gender;
 
+  @Transform(normalizeDigits)
   @Matches(/^\d{13}$/, { message: 'bFormNumber must be a 13-digit number' })
   bFormNumber: string;
 
@@ -56,6 +59,7 @@ export class CreateStudentDto {
   @MaxLength(150)
   guardianName: string;
 
+  @Transform(normalizeDigits)
   @Matches(/^\d{13}$/, { message: 'guardianCnic must be a 13-digit number' })
   guardianCnic: string;
 

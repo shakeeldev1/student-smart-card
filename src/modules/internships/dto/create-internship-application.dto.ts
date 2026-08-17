@@ -14,6 +14,7 @@ import { InternshipDuration } from '../enums/internship-duration.enum';
 import { InternshipGender } from '../enums/internship-gender.enum';
 import { InternshipMode } from '../enums/internship-mode.enum';
 import { InternshipType } from '../enums/internship-type.enum';
+import { normalizeDigits } from '../../../common/transforms/normalize-digits.transform';
 
 const transformBoolean = ({ value }: { value: unknown }) =>
   value === true || value === 'true';
@@ -33,9 +34,11 @@ export class CreateInternshipApplicationDto {
   @IsEnum(InternshipGender)
   gender: InternshipGender;
 
+  @Transform(normalizeDigits)
   @Matches(/^\d{13}$/, { message: 'bFormOrCnicNo must be a 13-digit number' })
   bFormOrCnicNo: string;
 
+  @Transform(normalizeDigits)
   @Matches(/^(?:\+?92|0)?3\d{9}$/, {
     message: 'mobileNumber must be a valid Pakistan mobile number',
   })
@@ -123,6 +126,7 @@ export class CreateInternshipApplicationDto {
   @MaxLength(80)
   emergencyContactRelationship: string;
 
+  @Transform(normalizeDigits)
   @Matches(/^(?:\+?92|0)?3\d{9}$/, {
     message:
       'emergencyContactMobileNumber must be a valid Pakistan mobile number',
