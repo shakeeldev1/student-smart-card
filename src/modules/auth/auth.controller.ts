@@ -33,6 +33,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SetupStudentAccountDto } from './dto/setup-student-account.dto';
+import { UpdateMeDto } from './dto/update-me.dto';
 import { RequestMeta } from './token.service';
 
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
@@ -124,6 +125,12 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser('sub') userId: string) {
     return this.authService.getMe(userId);
+  }
+
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  updateMe(@CurrentUser('sub') userId: string, @Body() dto: UpdateMeDto) {
+    return this.authService.updateMe(userId, dto);
   }
 
   @Patch('me/photo')

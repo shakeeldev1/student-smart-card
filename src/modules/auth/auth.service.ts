@@ -31,6 +31,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SetupStudentAccountDto } from './dto/setup-student-account.dto';
+import { UpdateMeDto } from './dto/update-me.dto';
 import { Student } from '../students/entities/student.entity';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import type { Multer } from 'multer';
@@ -312,6 +313,15 @@ export class AuthService {
     }
 
     return base;
+  }
+
+  async updateMe(userId: string, dto: UpdateMeDto) {
+    const updated = await this.usersService.update(userId, dto);
+    return {
+      id: updated.id,
+      name: updated.name,
+      phone: updated.phone,
+    };
   }
 
   async updateMyProfilePhoto(userId: string, file: Multer.File) {
