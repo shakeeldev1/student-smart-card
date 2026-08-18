@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsEmail,
   IsEnum,
@@ -12,6 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { InstitutionType } from '../../institutions/enums/institution-type.enum';
+import { normalizeDigits } from '../../../common/transforms/normalize-digits.transform';
 
 export class InstitutionRegistrationDto {
   @IsString()
@@ -35,8 +36,10 @@ export class InstitutionRegistrationDto {
   @MaxLength(100)
   city: string;
 
-  @IsString()
-  @MaxLength(20)
+  @Transform(normalizeDigits)
+  @Matches(/^(?:\+?92|0)\d{9,10}$/, {
+    message: 'contactNumber must be a valid Pakistan phone number',
+  })
   contactNumber: string;
 
   @IsEmail()
@@ -54,13 +57,16 @@ export class InstitutionRegistrationDto {
   @MaxLength(120)
   authorizedPersonDesignation: string;
 
+  @Transform(normalizeDigits)
   @Matches(/^\d{13}$/, {
     message: 'authorizedPersonCnic must be a 13-digit number',
   })
   authorizedPersonCnic: string;
 
-  @IsString()
-  @MaxLength(20)
+  @Transform(normalizeDigits)
+  @Matches(/^(?:\+?92|0)?3\d{9}$/, {
+    message: 'authorizedPersonMobile must be a valid Pakistan mobile number',
+  })
   authorizedPersonMobile: string;
 
   @IsInt()
@@ -83,8 +89,10 @@ export class RegisterSchoolDto {
   name: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @Transform(normalizeDigits)
+  @Matches(/^(?:\+?92|0)?3\d{9}$/, {
+    message: 'phone must be a valid Pakistan mobile number',
+  })
   phone?: string;
 
   @ValidateNested()

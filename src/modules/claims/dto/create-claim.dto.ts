@@ -43,8 +43,10 @@ export class CreateClaimDto {
   @Matches(/^\d{13}$/, { message: 'claimantCnic must be a 13-digit number' })
   claimantCnic: string;
 
-  @IsString()
-  @MaxLength(20)
+  @Transform(normalizeDigits)
+  @Matches(/^(?:\+?92|0)?3\d{9}$/, {
+    message: 'claimantContactNumber must be a valid Pakistan mobile number',
+  })
   claimantContactNumber: string;
 
   @IsString()

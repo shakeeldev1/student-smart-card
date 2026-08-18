@@ -35,8 +35,9 @@ export class CreateIndividualApplicationDto {
 
   @IsOptional()
   @Transform(normalizeDigits)
-  @IsString()
-  @MaxLength(20)
+  @Matches(/^(?:\+?92|0)?3\d{9}$/, {
+    message: 'contactNumber must be a valid Pakistan mobile number',
+  })
   contactNumber?: string;
 
   @IsOptional()

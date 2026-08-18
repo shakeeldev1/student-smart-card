@@ -1,14 +1,20 @@
-import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsEmail, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { normalizeDigits } from '../../../common/transforms/normalize-digits.transform';
 
 export class UpdateOwnStudentProfileDto {
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @Transform(normalizeDigits)
+  @Matches(/^(?:\+?92|0)?3\d{9}$/, {
+    message: 'contactNumber must be a valid Pakistan mobile number',
+  })
   contactNumber?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @Transform(normalizeDigits)
+  @Matches(/^(?:\+?92|0)?3\d{9}$/, {
+    message: 'guardianMobile must be a valid Pakistan mobile number',
+  })
   guardianMobile?: string;
 
   @IsOptional()

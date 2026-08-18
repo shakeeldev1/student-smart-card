@@ -56,8 +56,10 @@ export class CreateStudentDto {
   sectionId?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @Transform(normalizeDigits)
+  @Matches(/^(?:\+?92|0)?3\d{9}$/, {
+    message: 'contactNumber must be a valid Pakistan mobile number',
+  })
   contactNumber?: string;
 
   @IsOptional()
@@ -84,8 +86,10 @@ export class CreateStudentDto {
   guardianRelationship: GuardianRelationship;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @Transform(normalizeDigits)
+  @Matches(/^(?:\+?92|0)?3\d{9}$/, {
+    message: 'guardianMobile must be a valid Pakistan mobile number',
+  })
   guardianMobile?: string;
 
   @IsOptional()

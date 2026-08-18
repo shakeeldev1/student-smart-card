@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsEmail,
@@ -10,6 +11,7 @@ import {
 } from 'class-validator';
 import { Gender } from '../enums/gender.enum';
 import { GuardianRelationship } from '../enums/guardian-relationship.enum';
+import { normalizeDigits } from '../../../common/transforms/normalize-digits.transform';
 
 export class UpdateStudentDto {
   @IsOptional()
@@ -36,6 +38,7 @@ export class UpdateStudentDto {
   gender?: Gender;
 
   @IsOptional()
+  @Transform(normalizeDigits)
   @Matches(/^\d{13}$/, { message: 'bFormNumber must be a 13-digit number' })
   bFormNumber?: string;
 
@@ -53,8 +56,10 @@ export class UpdateStudentDto {
   sectionId?: string | null;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @Transform(normalizeDigits)
+  @Matches(/^(?:\+?92|0)?3\d{9}$/, {
+    message: 'contactNumber must be a valid Pakistan mobile number',
+  })
   contactNumber?: string;
 
   @IsOptional()
@@ -72,6 +77,7 @@ export class UpdateStudentDto {
   guardianName?: string;
 
   @IsOptional()
+  @Transform(normalizeDigits)
   @Matches(/^\d{13}$/, { message: 'guardianCnic must be a 13-digit number' })
   guardianCnic?: string;
 
@@ -84,8 +90,10 @@ export class UpdateStudentDto {
   guardianRelationship?: GuardianRelationship;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @Transform(normalizeDigits)
+  @Matches(/^(?:\+?92|0)?3\d{9}$/, {
+    message: 'guardianMobile must be a valid Pakistan mobile number',
+  })
   guardianMobile?: string;
 
   @IsOptional()
