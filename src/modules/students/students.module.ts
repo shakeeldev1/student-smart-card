@@ -6,6 +6,7 @@ import { StudentsController } from './students.controller';
 import { InstitutionsModule } from '../institutions/institutions.module';
 import { CardsModule } from '../cards/cards.module';
 import { ClassesModule } from '../classes/classes.module';
+import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { ClassesModule } from '../classes/classes.module';
     InstitutionsModule,
     CardsModule,
     ClassesModule,
+    CloudinaryModule,
   ],
   providers: [StudentsService],
   controllers: [StudentsController],

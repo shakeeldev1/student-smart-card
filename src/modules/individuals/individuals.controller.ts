@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -6,8 +7,13 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import type { Multer } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -50,6 +56,35 @@ export class IndividualsController {
     @Body() dto: UpdateIndividualApplicationDto,
   ) {
     return this.individualsService.updateMine(userId, dto);
+  }
+
+  @Post('me/photo')
+  @Roles(UserRole.INDIVIDUAL)
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 8 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowed.includes(file.mimetype)) {
+          cb(
+            new BadRequestException('Only JPG, PNG, and WEBP images are allowed'),
+            false,
+          );
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  uploadMyPhoto(
+    @CurrentUser('sub') userId: string,
+    @UploadedFile() file: Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No photo file was provided');
+    }
+    return this.individualsService.uploadMyPhoto(userId, file);
   }
 
   @Post('me/card/send-verification-email')

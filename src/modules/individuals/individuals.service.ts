@@ -18,6 +18,8 @@ import {
   EMAIL_SERVICE,
   type EmailProvider,
 } from '../email/interfaces/email-provider.interface';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import type { Multer } from 'multer';
 
 export interface IndividualFilters {
   status?: ApplicationStatus;
@@ -44,6 +46,7 @@ export class IndividualsService {
     private readonly cardsRepository: Repository<IndividualCard>,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   async create(
@@ -108,6 +111,30 @@ export class IndividualsService {
     });
 
     return this.individualsRepository.save(individual);
+  }
+
+  async uploadMyPhoto(
+    userId: string,
+    file: Multer.File,
+  ): Promise<{ photoUrl: string }> {
+    const individual = await this.findMine(userId);
+
+    const uploaded = await this.cloudinaryService.uploadBuffer(
+      file.buffer,
+      'student-smart-card/applicant-photos',
+      file.originalname,
+    );
+
+    const previousPublicId = individual.photoPublicId;
+    individual.photoUrl = uploaded.url;
+    individual.photoPublicId = uploaded.publicId;
+    await this.individualsRepository.save(individual);
+
+    if (previousPublicId) {
+      await this.cloudinaryService.destroy(previousPublicId);
+    }
+
+    return { photoUrl: uploaded.url };
   }
 
   async findMine(userId: string): Promise<Individual> {

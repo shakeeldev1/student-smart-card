@@ -27,6 +27,8 @@ import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { ApplicationStatus } from './enums/application-status.enum';
 import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { parseDateRange } from '../../common/utils/date-range.util';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import type { Multer } from 'multer';
 
 export interface StudentFilters {
   status?: ApplicationStatus;
@@ -51,6 +53,7 @@ export class StudentsService {
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
     private readonly config: ConfigService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   async create(
@@ -271,6 +274,31 @@ export class StudentsService {
 
     qb.orderBy('student.createdAt', 'DESC');
     return qb.getMany();
+  }
+
+  async uploadPhoto(
+    currentUser: JwtPayload,
+    id: string,
+    file: Multer.File,
+  ): Promise<{ photoUrl: string }> {
+    const student = await this.findOneForUser(currentUser, id);
+
+    const uploaded = await this.cloudinaryService.uploadBuffer(
+      file.buffer,
+      'student-smart-card/applicant-photos',
+      file.originalname,
+    );
+
+    const previousPublicId = student.photoPublicId;
+    student.photoUrl = uploaded.url;
+    student.photoPublicId = uploaded.publicId;
+    await this.studentsRepository.save(student);
+
+    if (previousPublicId) {
+      await this.cloudinaryService.destroy(previousPublicId);
+    }
+
+    return { photoUrl: uploaded.url };
   }
 
   async findOneForUser(currentUser: JwtPayload, id: string): Promise<Student> {

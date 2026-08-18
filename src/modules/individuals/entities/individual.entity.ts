@@ -31,6 +31,12 @@ export class Individual {
   fullName: string;
 
   @Column({ type: 'varchar', nullable: true })
+  photoUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  photoPublicId: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
   fatherName: string | null;
 
   @Column({ type: 'date' })

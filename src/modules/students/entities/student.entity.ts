@@ -26,6 +26,12 @@ export class Student {
   @Column({ type: 'varchar' })
   fullName: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  photoUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  photoPublicId: string | null;
+
   @Column({ type: 'varchar' })
   fatherName: string;
 
