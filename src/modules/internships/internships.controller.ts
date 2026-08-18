@@ -148,14 +148,14 @@ export class InternshipsController {
 
   @Patch(':id/approve')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OPERATOR)
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   approve(@CurrentUser('sub') operatorId: string, @Param('id') id: string) {
     return this.internshipsService.approve(operatorId, id);
   }
 
   @Patch(':id/reject')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OPERATOR)
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   reject(
     @CurrentUser('sub') operatorId: string,
     @Param('id') id: string,
@@ -166,7 +166,7 @@ export class InternshipsController {
 
   @Patch(':id/request-changes')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OPERATOR)
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   requestChanges(
     @CurrentUser('sub') operatorId: string,
     @Param('id') id: string,

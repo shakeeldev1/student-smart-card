@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
 } from 'class-validator';
@@ -42,6 +43,14 @@ export class UpdateStudentDto {
   @IsString()
   @MaxLength(50)
   className?: string;
+
+  @IsOptional()
+  @IsUUID()
+  classId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  sectionId?: string | null;
 
   @IsOptional()
   @IsString()

@@ -49,6 +49,12 @@ export class CreateStudentDto {
   @IsUUID()
   classId?: string;
 
+  // Optional — only meaningful alongside classId when the selected class
+  // has sections defined.
+  @IsOptional()
+  @IsUUID()
+  sectionId?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(20)

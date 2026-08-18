@@ -61,7 +61,10 @@ export class InternshipsService {
   ): Promise<InternshipApplication[]> {
     const qb = this.internshipRepository.createQueryBuilder('application');
 
-    if (currentUser.role !== UserRole.OPERATOR) {
+    if (
+      currentUser.role !== UserRole.OPERATOR &&
+      currentUser.role !== UserRole.ADMIN
+    ) {
       qb.andWhere('application.registeredByUserId = :userId', {
         userId: currentUser.sub,
       });
@@ -93,6 +96,7 @@ export class InternshipsService {
     const application = await this.findByIdOrThrow(id);
     if (
       currentUser.role !== UserRole.OPERATOR &&
+      currentUser.role !== UserRole.ADMIN &&
       application.registeredByUserId !== currentUser.sub
     ) {
       throw new ForbiddenException(

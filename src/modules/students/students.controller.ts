@@ -55,6 +55,7 @@ export class StudentsController {
     @Query('search') search?: string,
     @Query('institutionId') institutionId?: string,
     @Query('classId') classId?: string,
+    @Query('sectionId') sectionId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
@@ -64,6 +65,7 @@ export class StudentsController {
       search,
       institutionId,
       classId,
+      sectionId,
       startDate,
       endDate,
     });

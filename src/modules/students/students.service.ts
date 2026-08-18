@@ -17,6 +17,7 @@ import { UpdateOwnStudentProfileDto } from './dto/update-own-student-profile.dto
 import { InstitutionsService } from '../institutions/institutions.service';
 import { CardsService } from '../cards/cards.service';
 import { ClassesService } from '../classes/classes.service';
+import { SectionsService } from '../classes/sections.service';
 import {
   EMAIL_SERVICE,
   type EmailProvider,
@@ -33,6 +34,7 @@ export interface StudentFilters {
   search?: string;
   institutionId?: string;
   classId?: string;
+  sectionId?: string;
   startDate?: string;
   endDate?: string;
 }
@@ -45,6 +47,7 @@ export class StudentsService {
     private readonly institutionsService: InstitutionsService,
     private readonly cardsService: CardsService,
     private readonly classesService: ClassesService,
+    private readonly sectionsService: SectionsService,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
     private readonly config: ConfigService,
@@ -66,6 +69,7 @@ export class StudentsService {
     let institutionId: string | null = null;
     let institutionNameFreeText: string | null = null;
     let classId: string | null = null;
+    let sectionId: string | null = null;
     let className = dto.className?.trim() || null;
     let autoApprove = false;
     let consent = {
@@ -96,6 +100,14 @@ export class StudentsService {
         );
         classId = schoolClass.id;
         className = schoolClass.name;
+
+        if (dto.sectionId) {
+          const section = await this.sectionsService.findByIdForClassOwnership(
+            dto.sectionId,
+            classId,
+          );
+          sectionId = section.id;
+        }
       } else if (!className) {
         throw new BadRequestException('classId or className is required');
       }
@@ -136,6 +148,7 @@ export class StudentsService {
       bFormNumber: dto.bFormNumber,
       className: className!,
       classId,
+      sectionId,
       contactNumber: dto.contactNumber ?? null,
       email: dto.email ?? null,
       guardianName: dto.guardianName,
@@ -196,7 +209,8 @@ export class StudentsService {
       .createQueryBuilder('student')
       .leftJoinAndSelect('student.card', 'card')
       .leftJoinAndSelect('student.institution', 'institution')
-      .leftJoinAndSelect('student.schoolClass', 'schoolClass');
+      .leftJoinAndSelect('student.schoolClass', 'schoolClass')
+      .leftJoinAndSelect('student.section', 'section');
 
     if (currentUser.role === UserRole.SCHOOL) {
       const institution = await this.institutionsService.findByOwnerUserId(
@@ -230,6 +244,12 @@ export class StudentsService {
 
     if (filters.classId) {
       qb.andWhere('student.classId = :classId', { classId: filters.classId });
+    }
+
+    if (filters.sectionId) {
+      qb.andWhere('student.sectionId = :sectionId', {
+        sectionId: filters.sectionId,
+      });
     }
 
     if (filters.status) {
@@ -276,7 +296,45 @@ export class StudentsService {
     dto: UpdateStudentDto,
   ): Promise<Student> {
     const student = await this.findOneForUser(currentUser, id);
-    Object.assign(student, dto);
+
+    if (dto.classId !== undefined || dto.sectionId !== undefined) {
+      if (currentUser.role !== UserRole.SCHOOL) {
+        throw new ForbiddenException(
+          "Only the school can reassign a student's class or section",
+        );
+      }
+
+      let targetClassId = student.classId;
+      if (dto.classId) {
+        const schoolClass = await this.classesService.findByIdForOwnership(
+          dto.classId,
+          student.institutionId!,
+        );
+        student.classId = schoolClass.id;
+        student.className = schoolClass.name;
+        targetClassId = schoolClass.id;
+      }
+
+      if (dto.sectionId !== undefined) {
+        if (dto.sectionId === null) {
+          student.sectionId = null;
+        } else {
+          if (!targetClassId) {
+            throw new BadRequestException(
+              'Assign a class before assigning a section',
+            );
+          }
+          const section = await this.sectionsService.findByIdForClassOwnership(
+            dto.sectionId,
+            targetClassId,
+          );
+          student.sectionId = section.id;
+        }
+      }
+    }
+
+    const { classId: _classId, sectionId: _sectionId, ...rest } = dto;
+    Object.assign(student, rest);
     return this.studentsRepository.save(student);
   }
 
@@ -353,7 +411,7 @@ export class StudentsService {
   private async findByIdOrThrow(id: string): Promise<Student> {
     const student = await this.studentsRepository.findOne({
       where: { id },
-      relations: { card: true },
+      relations: { card: true, institution: true, schoolClass: true, section: true },
     });
     if (!student) {
       throw new NotFoundException('Student not found');
