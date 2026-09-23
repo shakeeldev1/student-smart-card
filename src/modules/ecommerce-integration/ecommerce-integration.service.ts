@@ -25,7 +25,7 @@ export class EcommerceIntegrationService {
   ): Promise<CardHolderProfileResponseDto | null> {
     const studentCard = await this.cardsRepository.findOne({
       where: { cardNumber },
-      relations: { student: { institution: true } },
+      relations: { student: { institution: true, section: true } },
     });
 
     if (studentCard) {
@@ -44,15 +44,23 @@ export class EcommerceIntegrationService {
         dateOfBirth: student.dateOfBirth,
         gender: student.gender,
         photoUrl: student.photoUrl,
-        institutionName: student.institution?.name ?? null,
+        // Parent-registered students have no institution row, only the
+        // free-text school name they typed.
+        institutionName:
+          student.institution?.name ?? student.institutionNameFreeText ?? null,
         className: student.className,
         issuedAt: studentCard.issuedAt,
+        expiresAt: studentCard.expiresAt,
+        institutionVerified: Boolean(student.institution),
+        institutionLogoUrl: student.institution?.logoUrl ?? null,
+        sectionName: student.section?.name ?? null,
+        rollNumber: student.rollNumber,
       };
     }
 
     const individualCard = await this.individualCardsRepository.findOne({
       where: { cardNumber },
-      relations: { individual: true },
+      relations: { individual: { user: true } },
     });
 
     if (individualCard) {
@@ -69,7 +77,7 @@ export class EcommerceIntegrationService {
         cardStatus: individualCard.status,
         holderType: 'individual',
         fullName: individual.fullName,
-        email: individual.email,
+        email: individual.email ?? individual.user?.email ?? null,
         contactNumber: individual.contactNumber,
         dateOfBirth: individual.dateOfBirth,
         gender: individual.gender,
@@ -77,6 +85,11 @@ export class EcommerceIntegrationService {
         institutionName: null,
         className: null,
         issuedAt: individualCard.issuedAt,
+        expiresAt: individualCard.expiresAt,
+        institutionVerified: false,
+        institutionLogoUrl: null,
+        sectionName: null,
+        rollNumber: null,
       };
     }
 

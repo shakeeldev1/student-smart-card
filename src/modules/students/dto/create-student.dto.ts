@@ -1,6 +1,5 @@
 import { Transform } from 'class-transformer';
 import {
-  IsBoolean,
   IsDateString,
   IsEmail,
   IsEnum,
@@ -55,6 +54,12 @@ export class CreateStudentDto {
   @IsUUID()
   sectionId?: string;
 
+  // School's own roll number; printed on the student's card.
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  rollNumber?: string;
+
   @IsOptional()
   @Transform(normalizeDigits)
   @Matches(/^(?:\+?92|0)?3\d{9}$/, {
@@ -62,14 +67,9 @@ export class CreateStudentDto {
   })
   contactNumber?: string;
 
-  @IsOptional()
+  // Required: the account-setup link and card verification codes go here.
   @IsEmail()
-  email?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  institutionName?: string;
+  email: string;
 
   @IsString()
   @MaxLength(150)
@@ -105,20 +105,4 @@ export class CreateStudentDto {
   @IsString()
   @MaxLength(100)
   guardianCity?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  consentEnrollment?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  consentIdentityVerification?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  consentTermsAccepted?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  consentDeclarationAccepted?: boolean;
 }

@@ -69,77 +69,53 @@ export class StudentsService {
       );
     }
 
-    let institutionId: string | null = null;
-    let institutionNameFreeText: string | null = null;
+    // Students are enrolled only by their school. (Adults without a school
+    // register themselves through the separate Individual flow.)
+    if (currentUser.role !== UserRole.SCHOOL) {
+      throw new ForbiddenException('Only a school can enroll students');
+    }
+
+    const institutionNameFreeText: string | null = null;
     let classId: string | null = null;
     let sectionId: string | null = null;
     let className = dto.className?.trim() || null;
-    let autoApprove = false;
-    let consent = {
+    const consent = {
       consentEnrollment: true,
       consentIdentityVerification: true,
       consentTermsAccepted: true,
       consentDeclarationAccepted: true,
     };
 
-    if (currentUser.role === UserRole.SCHOOL) {
-      const institution = await this.institutionsService.findByOwnerUserId(
-        currentUser.sub,
+    const institution = await this.institutionsService.findByOwnerUserId(
+      currentUser.sub,
+    );
+    if (!institution) {
+      throw new ForbiddenException('No institution found for this account');
+    }
+    const institutionId: string | null = institution.id;
+    // Students registered directly by a verified school are trusted and
+    // skip manual review; a school whose own institution hasn't been
+    // approved yet still goes through the normal pending queue.
+    const autoApprove =
+      institution.approvalStatus === InstitutionApprovalStatus.APPROVED;
+
+    if (dto.classId) {
+      const schoolClass = await this.classesService.findByIdForOwnership(
+        dto.classId,
+        institution.id,
       );
-      if (!institution) {
-        throw new ForbiddenException('No institution found for this account');
-      }
-      institutionId = institution.id;
-      // Students registered directly by a verified school are trusted and
-      // skip manual review; a school whose own institution hasn't been
-      // approved yet still goes through the normal pending queue.
-      autoApprove =
-        institution.approvalStatus === InstitutionApprovalStatus.APPROVED;
+      classId = schoolClass.id;
+      className = schoolClass.name;
 
-      if (dto.classId) {
-        const schoolClass = await this.classesService.findByIdForOwnership(
-          dto.classId,
-          institution.id,
+      if (dto.sectionId) {
+        const section = await this.sectionsService.findByIdForClassOwnership(
+          dto.sectionId,
+          classId,
         );
-        classId = schoolClass.id;
-        className = schoolClass.name;
-
-        if (dto.sectionId) {
-          const section = await this.sectionsService.findByIdForClassOwnership(
-            dto.sectionId,
-            classId,
-          );
-          sectionId = section.id;
-        }
-      } else if (!className) {
-        throw new BadRequestException('classId or className is required');
+        sectionId = section.id;
       }
-    } else {
-      if (!dto.institutionName?.trim()) {
-        throw new BadRequestException(
-          'institutionName is required for individual registrations',
-        );
-      }
-      if (!className) {
-        throw new BadRequestException(
-          'className is required for individual registrations',
-        );
-      }
-      if (
-        !dto.consentEnrollment ||
-        !dto.consentIdentityVerification ||
-        !dto.consentTermsAccepted ||
-        !dto.consentDeclarationAccepted
-      ) {
-        throw new BadRequestException('All consent confirmations are required');
-      }
-      institutionNameFreeText = dto.institutionName.trim();
-      consent = {
-        consentEnrollment: dto.consentEnrollment,
-        consentIdentityVerification: dto.consentIdentityVerification,
-        consentTermsAccepted: dto.consentTermsAccepted,
-        consentDeclarationAccepted: dto.consentDeclarationAccepted,
-      };
+    } else if (!className) {
+      throw new BadRequestException('classId or className is required');
     }
 
     const student = this.studentsRepository.create({
@@ -150,6 +126,7 @@ export class StudentsService {
       gender: dto.gender,
       bFormNumber: dto.bFormNumber,
       className: className!,
+      rollNumber: await this.normalizeRollNumber(dto.rollNumber, institutionId),
       classId,
       sectionId,
       contactNumber: dto.contactNumber ?? null,
@@ -184,6 +161,53 @@ export class StudentsService {
     }
 
     return saved;
+  }
+
+  /**
+   * Trims the roll number and enforces uniqueness within the institution
+   * (a DB partial unique index backs this up). Blank → null.
+   */
+  private async normalizeRollNumber(
+    rollNumber: string | undefined | null,
+    institutionId: string | null,
+    excludeStudentId?: string,
+  ): Promise<string | null> {
+    const value = rollNumber?.trim() || null;
+    if (!value || !institutionId) {
+      return value;
+    }
+    const clash = await this.studentsRepository.findOne({
+      where: { institutionId, rollNumber: value },
+    });
+    if (clash && clash.id !== excludeStudentId) {
+      throw new ConflictException(
+        `Roll number ${value} is already assigned to another student in this institution`,
+      );
+    }
+    return value;
+  }
+
+  /**
+   * Re-sends the account setup link (new 7-day token). For when the first
+   * email expired, was lost, or the email was only added after registration.
+   */
+  async resendSetupEmail(
+    currentUser: JwtPayload,
+    id: string,
+  ): Promise<{ message: string }> {
+    const student = await this.findOneForUser(currentUser, id);
+    if (student.userId) {
+      throw new BadRequestException(
+        'This student has already set up their account',
+      );
+    }
+    if (!student.email) {
+      throw new BadRequestException(
+        'Add an email address for this student before sending the setup link',
+      );
+    }
+    await this.sendSetupEmail(student);
+    return { message: `Setup link sent to ${student.email}` };
   }
 
   private async sendSetupEmail(student: Student): Promise<void> {
@@ -222,10 +246,6 @@ export class StudentsService {
       if (!institution) return [];
       qb.andWhere('student.institutionId = :institutionId', {
         institutionId: institution.id,
-      });
-    } else if (currentUser.role === UserRole.PARENT) {
-      qb.andWhere('student.registeredByUserId = :userId', {
-        userId: currentUser.sub,
       });
     } else if (
       (currentUser.role === UserRole.ADMIN ||
@@ -310,7 +330,7 @@ export class StudentsService {
   async findByUserId(userId: string): Promise<Student> {
     const student = await this.studentsRepository.findOne({
       where: { userId },
-      relations: { card: true, institution: true },
+      relations: { card: true, institution: true, section: true },
     });
     if (!student) {
       throw new NotFoundException('No student record linked to this account');
@@ -361,9 +381,29 @@ export class StudentsService {
       }
     }
 
-    const { classId: _classId, sectionId: _sectionId, ...rest } = dto;
+    const {
+      classId: _classId,
+      sectionId: _sectionId,
+      rollNumber,
+      ...rest
+    } = dto;
+    if (rollNumber !== undefined) {
+      student.rollNumber = await this.normalizeRollNumber(
+        rollNumber,
+        student.institutionId,
+        student.id,
+      );
+    }
+
+    const hadEmail = Boolean(student.email);
     Object.assign(student, rest);
-    return this.studentsRepository.save(student);
+    const saved = await this.studentsRepository.save(student);
+
+    // An email added after registration never received the setup link.
+    if (!hadEmail && saved.email && !saved.userId) {
+      await this.sendSetupEmail(saved);
+    }
+    return saved;
   }
 
   async updateOwnProfile(
@@ -386,7 +426,10 @@ export class StudentsService {
     student.reviewedByUserId = operatorId;
     student.reviewedAt = new Date();
     student.reviewNote = null;
-    return this.studentsRepository.save(student);
+    // Same outcome as a verified school's auto-approval: an approved student
+    // gets their certificate and (pending-verification) card immediately, so
+    // no approved student is left without a card.
+    return this.grantCertificateAndCard(student);
   }
 
   async reject(
@@ -399,7 +442,11 @@ export class StudentsService {
     student.reviewedByUserId = operatorId;
     student.reviewedAt = new Date();
     student.reviewNote = reason ?? null;
-    return this.studentsRepository.save(student);
+    const saved = await this.studentsRepository.save(student);
+    // A rejected student must not keep a usable card (e.g. one issued by an
+    // earlier auto-approval) — partners like SSC only honor ACTIVE cards.
+    await this.cardsService.suspendForStudent(saved.id);
+    return saved;
   }
 
   async requestChanges(
@@ -471,7 +518,8 @@ export class StudentsService {
       return;
     }
 
-    if (student.registeredByUserId !== currentUser.sub) {
+    // Otherwise only the student themselves.
+    if (!student.userId || student.userId !== currentUser.sub) {
       throw new ForbiddenException(
         'You do not have access to this student record',
       );

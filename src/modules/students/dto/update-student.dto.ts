@@ -56,6 +56,11 @@ export class UpdateStudentDto {
   sectionId?: string | null;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  rollNumber?: string;
+
+  @IsOptional()
   @Transform(normalizeDigits)
   @Matches(/^(?:\+?92|0)?3\d{9}$/, {
     message: 'contactNumber must be a valid Pakistan mobile number',
@@ -65,11 +70,6 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsEmail()
   email?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  institutionName?: string;
 
   @IsOptional()
   @IsString()

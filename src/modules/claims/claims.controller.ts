@@ -17,7 +17,7 @@ import { UpdateClaimStatusDto } from './dto/update-claim-status.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 
-const OWNER_ROLES = [UserRole.PARENT, UserRole.STUDENT];
+const OWNER_ROLES = [UserRole.STUDENT];
 
 @Controller('claims')
 export class ClaimsController {

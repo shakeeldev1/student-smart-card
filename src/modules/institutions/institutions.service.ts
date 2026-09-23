@@ -7,6 +7,8 @@ import { InstitutionApprovalStatus } from './enums/institution-approval-status.e
 import { InstitutionType } from './enums/institution-type.enum';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
 import { parseDateRange } from '../../common/utils/date-range.util';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import type { Multer } from 'multer';
 
 export interface InstitutionAdminFilters {
   status?: InstitutionApprovalStatus;
@@ -39,6 +41,7 @@ export class InstitutionsService {
     private readonly institutionsRepository: Repository<Institution>,
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   createWithManager(
@@ -172,6 +175,51 @@ export class InstitutionsService {
     }
     Object.assign(institution, dto);
     return this.institutionsRepository.save(institution);
+  }
+
+  async uploadOwnLogo(
+    ownerUserId: string,
+    file: Multer.File,
+  ): Promise<{ logoUrl: string }> {
+    const institution = await this.findByOwnerUserId(ownerUserId);
+    if (!institution) {
+      throw new NotFoundException('No institution found for this account');
+    }
+
+    const uploaded = await this.cloudinaryService.uploadBuffer(
+      file.buffer,
+      'student-smart-card/institution-logos',
+      file.originalname,
+    );
+
+    const previousPublicId = institution.logoPublicId;
+    institution.logoUrl = uploaded.url;
+    institution.logoPublicId = uploaded.publicId;
+    await this.institutionsRepository.save(institution);
+
+    if (previousPublicId) {
+      await this.cloudinaryService.destroy(previousPublicId);
+    }
+
+    return { logoUrl: uploaded.url };
+  }
+
+  async removeOwnLogo(ownerUserId: string): Promise<{ message: string }> {
+    const institution = await this.findByOwnerUserId(ownerUserId);
+    if (!institution) {
+      throw new NotFoundException('No institution found for this account');
+    }
+
+    const previousPublicId = institution.logoPublicId;
+    institution.logoUrl = null;
+    institution.logoPublicId = null;
+    await this.institutionsRepository.save(institution);
+
+    if (previousPublicId) {
+      await this.cloudinaryService.destroy(previousPublicId);
+    }
+
+    return { message: 'Logo removed' };
   }
 
   async remove(id: string): Promise<{ message: string }> {

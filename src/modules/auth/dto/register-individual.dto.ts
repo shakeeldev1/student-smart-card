@@ -9,7 +9,7 @@ import {
 } from 'class-validator';
 import { normalizeDigits } from '../../../common/transforms/normalize-digits.transform';
 
-export class RegisterParentDto {
+export class RegisterIndividualDto {
   @IsEmail()
   email: string;
 

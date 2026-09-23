@@ -40,7 +40,7 @@ export class StudentsController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.SCHOOL)
+  @Roles(UserRole.SCHOOL)
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateStudentDto) {
     return this.studentsService.create(user, dto);
   }
@@ -48,7 +48,6 @@ export class StudentsController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles(
-    UserRole.PARENT,
     UserRole.SCHOOL,
     UserRole.OPERATOR,
     UserRole.EFU,
@@ -87,7 +86,6 @@ export class StudentsController {
   @Get(':id')
   @UseGuards(RolesGuard)
   @Roles(
-    UserRole.PARENT,
     UserRole.SCHOOL,
     UserRole.OPERATOR,
     UserRole.EFU,
@@ -133,6 +131,18 @@ export class StudentsController {
     return this.studentsService.issueCertificate(id);
   }
 
+  @Post(':id/resend-setup-email')
+  @UseGuards(RolesGuard)
+  @Roles(
+    UserRole.SCHOOL,
+    UserRole.OPERATOR,
+    UserRole.ADMIN,
+  )
+  @HttpCode(HttpStatus.OK)
+  resendSetupEmail(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.studentsService.resendSetupEmail(user, id);
+  }
+
   @Patch('me')
   @UseGuards(RolesGuard)
   @Roles(UserRole.STUDENT)
@@ -145,7 +155,7 @@ export class StudentsController {
 
   @Post(':id/photo')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.SCHOOL, UserRole.ADMIN)
+  @Roles(UserRole.SCHOOL, UserRole.ADMIN)
   @UseInterceptors(
     FileInterceptor('photo', {
       storage: memoryStorage(),
@@ -176,7 +186,7 @@ export class StudentsController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.SCHOOL, UserRole.ADMIN)
+  @Roles(UserRole.SCHOOL, UserRole.ADMIN)
   update(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
@@ -187,7 +197,7 @@ export class StudentsController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.PARENT, UserRole.SCHOOL, UserRole.ADMIN)
+  @Roles(UserRole.SCHOOL, UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
   async remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     await this.studentsService.remove(user, id);

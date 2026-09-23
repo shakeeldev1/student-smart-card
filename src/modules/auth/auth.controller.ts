@@ -24,7 +24,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AuthService } from './auth.service';
-import { RegisterParentDto } from './dto/register-parent.dto';
+import { RegisterIndividualDto } from './dto/register-individual.dto';
 import { RegisterSchoolDto } from './dto/register-school.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
@@ -49,12 +49,6 @@ function requestMeta(req: Request): RequestMeta {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('register')
-  @Throttle(AUTH_THROTTLE)
-  register(@Body() dto: RegisterParentDto) {
-    return this.authService.registerParent(dto);
-  }
-
   @Post('register/school')
   @Throttle(AUTH_THROTTLE)
   registerSchool(@Body() dto: RegisterSchoolDto) {
@@ -63,7 +57,7 @@ export class AuthController {
 
   @Post('register/individual')
   @Throttle(AUTH_THROTTLE)
-  registerIndividual(@Body() dto: RegisterParentDto) {
+  registerIndividual(@Body() dto: RegisterIndividualDto) {
     return this.authService.registerIndividual(dto);
   }
 

@@ -65,6 +65,12 @@ export class Institution {
   @Column({ type: 'int' })
   numberOfStudents: number;
 
+  @Column({ type: 'varchar', nullable: true })
+  logoUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  logoPublicId: string | null;
+
   @Column({
     type: 'enum',
     enum: InstitutionApprovalStatus,

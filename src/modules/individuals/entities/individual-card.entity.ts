@@ -44,6 +44,16 @@ export class IndividualCard {
   @Column({ type: 'timestamptz', nullable: true })
   verificationCodeExpiresAt: Date | null;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  expiresAt: Date | null;
+
+  // Failed code attempts against the current code; reset on each new code.
+  @Column({ type: 'int', default: 0 })
+  verificationAttempts: number;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  verificationCodeSentAt: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

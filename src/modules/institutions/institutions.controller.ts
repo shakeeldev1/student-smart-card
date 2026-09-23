@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -6,9 +7,15 @@ import {
   NotFoundException,
   Param,
   Patch,
+  Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import type { Multer } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -65,6 +72,41 @@ export class InstitutionsController {
     @Body() dto: UpdateInstitutionDto,
   ) {
     return this.institutionsService.updateOwn(ownerUserId, dto);
+  }
+
+  @Post('me/logo')
+  @Roles(UserRole.SCHOOL)
+  @UseInterceptors(
+    FileInterceptor('logo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 2 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowed.includes(file.mimetype)) {
+          cb(
+            new BadRequestException('Only JPG, PNG, and WEBP images are allowed'),
+            false,
+          );
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  uploadMyLogo(
+    @CurrentUser('sub') ownerUserId: string,
+    @UploadedFile() file: Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No logo file was provided');
+    }
+    return this.institutionsService.uploadOwnLogo(ownerUserId, file);
+  }
+
+  @Delete('me/logo')
+  @Roles(UserRole.SCHOOL)
+  removeMyLogo(@CurrentUser('sub') ownerUserId: string) {
+    return this.institutionsService.removeOwnLogo(ownerUserId);
   }
 
   @Patch(':id/approve')

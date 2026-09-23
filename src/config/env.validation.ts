@@ -46,4 +46,7 @@ export const envValidationSchema = Joi.object({
   THROTTLE_LIMIT: Joi.number().default(20),
 
   ECOMMERCE_API_KEY: Joi.string().min(16).required(),
+
+  // How long a newly issued card is valid for.
+  CARD_VALIDITY_MONTHS: Joi.number().integer().min(1).default(12),
 });

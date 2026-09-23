@@ -51,6 +51,10 @@ export class Student {
   @Column({ type: 'varchar' })
   className: string;
 
+  // The school's own roll number (unique per institution), printed on the card.
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  rollNumber: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   contactNumber: string | null;
 

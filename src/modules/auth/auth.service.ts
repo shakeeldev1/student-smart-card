@@ -22,7 +22,7 @@ import {
   EMAIL_SERVICE,
   type EmailProvider,
 } from '../email/interfaces/email-provider.interface';
-import { RegisterParentDto } from './dto/register-parent.dto';
+import { RegisterIndividualDto } from './dto/register-individual.dto';
 import { RegisterSchoolDto } from './dto/register-school.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
@@ -34,6 +34,8 @@ import { SetupStudentAccountDto } from './dto/setup-student-account.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { Student } from '../students/entities/student.entity';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { CardsService } from '../cards/cards.service';
+import { ApplicationStatus } from '../students/enums/application-status.enum';
 import type { Multer } from 'multer';
 
 @Injectable()
@@ -49,6 +51,7 @@ export class AuthService {
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly cardsService: CardsService,
   ) {}
 
   private hashPassword(password: string): Promise<string> {
@@ -58,40 +61,7 @@ export class AuthService {
     );
   }
 
-  async registerParent(dto: RegisterParentDto) {
-    const existing = await this.usersService.findByEmail(dto.email);
-    if (existing) {
-      throw new ConflictException('Email already registered');
-    }
-
-    const passwordHash = await this.hashPassword(dto.password);
-    const user = this.usersService.create({
-      email: dto.email,
-      passwordHash,
-      name: dto.name,
-      role: UserRole.PARENT,
-      phone: dto.phone ?? null,
-    });
-    const saved = await this.usersService.save(user);
-
-    const code = await this.otpService.generate(
-      saved.id,
-      OtpPurpose.EMAIL_VERIFICATION,
-    );
-    await this.emailService.sendOtpEmail(
-      saved.email,
-      code,
-      OtpPurpose.EMAIL_VERIFICATION,
-    );
-
-    return {
-      userId: saved.id,
-      email: saved.email,
-      message: 'Verification code sent',
-    };
-  }
-
-  async registerIndividual(dto: RegisterParentDto) {
+  async registerIndividual(dto: RegisterIndividualDto) {
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) {
       throw new ConflictException('Email already registered');
@@ -221,6 +191,16 @@ export class AuthService {
       throw new ForbiddenException({
         code: 'EMAIL_NOT_VERIFIED',
         message: 'Email not verified',
+      });
+    }
+
+    // The parent account type has been removed: students are enrolled only
+    // by their school, and individuals register themselves.
+    if (user.role === UserRole.PARENT) {
+      throw new ForbiddenException({
+        code: 'ACCOUNT_TYPE_DISCONTINUED',
+        message:
+          'Parent accounts have been discontinued. Students are enrolled by their school; adults can register as an Individual.',
       });
     }
 
@@ -387,6 +367,12 @@ export class AuthService {
     student.setupToken = null;
     student.setupTokenExpiresAt = null;
     await this.studentsRepository.save(student);
+
+    // Students approved before approval started issuing cards may have none
+    // yet — make sure an approved student has their card on first login.
+    if (student.status === ApplicationStatus.APPROVED) {
+      await this.cardsService.issueForStudent(student.id);
+    }
 
     // Generate tokens
     const tokens = await this.tokenService.issueTokenPair(user);

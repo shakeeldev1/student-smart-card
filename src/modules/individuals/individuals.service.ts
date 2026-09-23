@@ -14,6 +14,13 @@ import { CreateIndividualApplicationDto } from './dto/create-individual-applicat
 import { UpdateIndividualApplicationDto } from './dto/update-individual-application.dto';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
 import { CardStatus } from '../cards/enums/card-status.enum';
+import { ConfigService } from '@nestjs/config';
+import {
+  CARD_VALIDITY_MONTHS_DEFAULT,
+  cardExpiryFrom,
+  consumeVerificationCode,
+  issueVerificationCode,
+} from '../cards/card-verification.util';
 import {
   EMAIL_SERVICE,
   type EmailProvider,
@@ -47,6 +54,7 @@ export class IndividualsService {
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly config: ConfigService,
   ) {}
 
   async create(
@@ -209,7 +217,10 @@ export class IndividualsService {
     individual.reviewedByUserId = operatorId;
     individual.reviewedAt = new Date();
     individual.reviewNote = null;
-    return this.individualsRepository.save(individual);
+    await this.individualsRepository.save(individual);
+    // Approval issues the certificate and (pending-verification) card right
+    // away, matching the student flow — no approved holder without a card.
+    return this.issueCertificate(individual.id);
   }
 
   async reject(
@@ -222,6 +233,13 @@ export class IndividualsService {
     individual.reviewedByUserId = operatorId;
     individual.reviewedAt = new Date();
     individual.reviewNote = reason ?? null;
+    // A rejected holder must not keep a usable card.
+    if (individual.card && individual.card.status !== CardStatus.SUSPENDED) {
+      individual.card.status = CardStatus.SUSPENDED;
+      individual.card.verificationCode = null;
+      individual.card.verificationCodeExpiresAt = null;
+      await this.cardsRepository.save(individual.card);
+    }
     return this.individualsRepository.save(individual);
   }
 
@@ -261,35 +279,47 @@ export class IndividualsService {
       return saved;
     }
 
+    const issuedAt = new Date();
     const card = this.cardsRepository.create({
       individualId: saved.id,
       cardNumber: `IND-CARD-${randomBytes(4).toString('hex').toUpperCase()}`,
       status: CardStatus.PENDING_VERIFICATION,
-      issuedAt: new Date(),
+      issuedAt,
+      expiresAt: cardExpiryFrom(
+        issuedAt,
+        Number(this.config.get('CARD_VALIDITY_MONTHS')) ||
+          CARD_VALIDITY_MONTHS_DEFAULT,
+      ),
     });
     saved.card = await this.cardsRepository.save(card);
     return saved;
   }
 
   async sendCardVerificationEmail(userId: string): Promise<{ message: string }> {
-    const individual = await this.findMine(userId);
+    const individual = await this.individualsRepository.findOne({
+      where: { userId },
+      relations: { card: true, user: true },
+    });
+    if (!individual) {
+      throw new NotFoundException('No application found for this account');
+    }
     if (!individual.card) {
       throw new BadRequestException('No card has been issued yet');
     }
-    if (!individual.email) {
+    // Fall back to the self-registered account's login email.
+    const email = individual.email ?? individual.user?.email ?? null;
+    if (!email) {
       throw new BadRequestException(
         'An email address is required before card verification can be sent',
       );
     }
 
-    const code = randomBytes(4).toString('hex').toUpperCase();
     const card = individual.card;
-    card.verificationCode = code;
-    card.verificationCodeExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const code = issueVerificationCode(card);
     await this.cardsRepository.save(card);
 
     await this.emailService.sendCardVerificationEmail(
-      individual.email,
+      email,
       individual.fullName,
       card.cardNumber,
       code,
@@ -302,24 +332,13 @@ export class IndividualsService {
     const individual = await this.findMine(userId);
     const card = individual.card;
 
-    if (!card || !card.verificationCode || !card.verificationCodeExpiresAt) {
+    if (!card || typeof code !== 'string') {
       return { valid: false };
     }
 
-    if (new Date() > new Date(card.verificationCodeExpiresAt)) {
-      return { valid: false };
-    }
-
-    const isValid = card.verificationCode === code.trim().toUpperCase();
-    if (!isValid) {
-      return { valid: false };
-    }
-
-    card.status = CardStatus.ACTIVE;
-    card.verificationCode = null;
-    card.verificationCodeExpiresAt = null;
+    const valid = consumeVerificationCode(card, code);
+    // Persist either way: failed attempts are counted.
     await this.cardsRepository.save(card);
-
-    return { valid: true };
+    return { valid };
   }
 }
