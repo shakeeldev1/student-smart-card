@@ -61,6 +61,18 @@ export class Individual {
   @Column({ type: 'varchar', nullable: true })
   city: string | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  province: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  region: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  district: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  tehsil: string | null;
+
   @Column({ type: 'varchar' })
   nomineeName: string;
 

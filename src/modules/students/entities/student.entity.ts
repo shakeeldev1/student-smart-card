@@ -56,6 +56,18 @@ export class Student {
   rollNumber: string | null;
 
   @Column({ type: 'varchar', nullable: true })
+  province: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  region: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  district: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  tehsil: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
   contactNumber: string | null;
 
   @Column({ type: 'varchar', nullable: true })

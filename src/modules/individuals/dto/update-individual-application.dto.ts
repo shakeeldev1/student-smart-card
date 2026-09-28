@@ -44,6 +44,26 @@ export class UpdateIndividualApplicationDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(80)
+  province?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  region?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  district?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  tehsil?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(150)
   nomineeName?: string;
 
