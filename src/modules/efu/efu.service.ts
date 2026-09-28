@@ -94,9 +94,9 @@ export class EfuService {
       this.studentsRepository
         .createQueryBuilder('student')
         .leftJoin('student.card', 'card')
-        .select(`COALESCE("card"."status", 'no_card')`, 'status')
+        .select(`COALESCE("card"."status"::text, 'no_card')`, 'status')
         .addSelect('COUNT(*)', 'count')
-        .groupBy(`COALESCE("card"."status", 'no_card')`)
+        .groupBy(`COALESCE("card"."status"::text, 'no_card')`)
         .getRawMany<{ status: string; count: string }>(),
       this.studentsRepository.count({ where: { certificateIssued: true } }),
       this.studentsRepository
