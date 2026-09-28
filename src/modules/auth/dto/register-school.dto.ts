@@ -36,6 +36,23 @@ export class InstitutionRegistrationDto {
   @MaxLength(100)
   city: string;
 
+  @IsString()
+  @MaxLength(80)
+  province: string;
+
+  @IsString()
+  @MaxLength(120)
+  region: string;
+
+  @IsString()
+  @MaxLength(120)
+  district: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  tehsil?: string;
+
   @Transform(normalizeDigits)
   @Matches(/^(?:\+?92|0)\d{9,10}$/, {
     message: 'contactNumber must be a valid Pakistan phone number',
