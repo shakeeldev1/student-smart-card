@@ -18,6 +18,7 @@ export interface EfuStudentQuery {
   certificateStatus?: 'issued' | 'not_issued';
   institutionId?: string;
   classId?: string;
+  sectionId?: string;
   gender?: string;
   startDate?: string;
   endDate?: string;
@@ -213,6 +214,9 @@ export class EfuService {
     }
     if (query.classId) {
       qb.andWhere('student.classId = :classId', { classId: query.classId });
+    }
+    if (query.sectionId) {
+      qb.andWhere('student.sectionId = :sectionId', { sectionId: query.sectionId });
     }
     if (query.gender) {
       qb.andWhere('student.gender = :gender', { gender: query.gender });
