@@ -7,10 +7,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
-import { randomBytes } from 'crypto';
+import { randomInt } from 'crypto';
 import { Inject } from '@nestjs/common';
 import { Card } from './entities/card.entity';
 import { IndividualCard } from '../individuals/entities/individual-card.entity';
+import { Student } from '../students/entities/student.entity';
 import { CardStatus } from './enums/card-status.enum';
 import {
   CARD_VALIDITY_MONTHS_DEFAULT,
@@ -24,6 +25,11 @@ import {
 } from '../email/interfaces/email-provider.interface';
 import type { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { UserRole } from '../users/enums/user-role.enum';
+import {
+  SSCP_PREFIX,
+  provinceCode,
+  districtCode,
+} from '../../common/geo/pakistan-geo-codes';
 
 export interface CardLookupResult {
   cardNumber: string;
@@ -41,6 +47,8 @@ export class CardsService {
     private readonly cardsRepository: Repository<Card>,
     @InjectRepository(IndividualCard)
     private readonly individualCardsRepository: Repository<IndividualCard>,
+    @InjectRepository(Student)
+    private readonly studentsRepository: Repository<Student>,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
     private readonly config: ConfigService,
@@ -54,6 +62,35 @@ export class CardsService {
     return cardExpiryFrom(issuedAt, months);
   }
 
+  /**
+   * Builds a bank-style 16-digit card number:
+   *   7727 (SSCP) + PP (province) + DD (district) + 8 random digits.
+   * The 8 random digits are re-rolled until the full number is unique across
+   * both student and individual cards, so numbers are safe to later attach to
+   * bank accounts.
+   */
+  private async generateStudentCardNumber(
+    province?: string | null,
+    district?: string | null,
+  ): Promise<string> {
+    const prefix = `${SSCP_PREFIX}${provinceCode(province)}${districtCode(province, district)}`;
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const random8 = String(randomInt(0, 100_000_000)).padStart(8, '0');
+      const cardNumber = `${prefix}${random8}`;
+      const [asStudent, asIndividual] = await Promise.all([
+        this.cardsRepository.findOne({ where: { cardNumber } }),
+        this.individualCardsRepository.findOne({ where: { cardNumber } }),
+      ]);
+      if (!asStudent && !asIndividual) {
+        return cardNumber;
+      }
+    }
+    // Astronomically unlikely; surface loudly rather than issuing a dup.
+    throw new BadRequestException(
+      'Could not generate a unique card number, please try again',
+    );
+  }
+
   async issueForStudent(studentId: string): Promise<Card> {
     const existing = await this.cardsRepository.findOne({
       where: { studentId },
@@ -62,10 +99,18 @@ export class CardsService {
       return existing;
     }
 
+    const student = await this.studentsRepository.findOne({
+      where: { id: studentId },
+    });
+    const cardNumber = await this.generateStudentCardNumber(
+      student?.province,
+      student?.district,
+    );
+
     const issuedAt = new Date();
     const card = this.cardsRepository.create({
       studentId,
-      cardNumber: `CARD-${randomBytes(4).toString('hex').toUpperCase()}`,
+      cardNumber,
       status: CardStatus.PENDING_VERIFICATION,
       issuedAt,
       expiresAt: this.newCardExpiry(issuedAt),
