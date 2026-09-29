@@ -16,6 +16,11 @@ export class AdminController {
     return this.adminService.getStats();
   }
 
+  @Get('analytics')
+  getAnalytics() {
+    return this.adminService.getAnalytics();
+  }
+
   @Get('reports/students.csv')
   @Header('Content-Type', 'text/csv; charset=utf-8')
   @Header(
