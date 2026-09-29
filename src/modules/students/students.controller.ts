@@ -26,6 +26,7 @@ import type { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
+import { PromoteStudentsDto } from './dto/promote-students.dto';
 import { UpdateOwnStudentProfileDto } from './dto/update-own-student-profile.dto';
 import {
   RejectStudentDto,
@@ -43,6 +44,14 @@ export class StudentsController {
   @Roles(UserRole.SCHOOL)
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateStudentDto) {
     return this.studentsService.create(user, dto);
+  }
+
+  @Post('promote')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SCHOOL)
+  @HttpCode(HttpStatus.OK)
+  promote(@CurrentUser() user: JwtPayload, @Body() dto: PromoteStudentsDto) {
+    return this.studentsService.promoteStudents(user, dto);
   }
 
   @Get()

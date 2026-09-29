@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { Student } from './entities/student.entity';
 import { CreateStudentDto } from './dto/create-student.dto';
@@ -329,6 +329,61 @@ export class StudentsService {
     const student = await this.findByIdOrThrow(id);
     await this.assertOwnership(currentUser, student);
     return student;
+  }
+
+  /**
+   * Bulk-promote (or move) students to a target class/section. The school
+   * picks which students to include, so failed/repeating students can simply
+   * be left out. Only the school that owns the students may do this, and the
+   * target class/section must belong to that same institution.
+   */
+  async promoteStudents(
+    currentUser: JwtPayload,
+    dto: {
+      studentIds: string[];
+      targetClassId: string;
+      targetSectionId?: string | null;
+    },
+  ): Promise<{ promoted: number; skipped: number }> {
+    const institution = await this.institutionsService.findByOwnerUserId(
+      currentUser.sub,
+    );
+    if (!institution) {
+      throw new ForbiddenException('No institution found for this account');
+    }
+
+    const targetClass = await this.classesService.findByIdForOwnership(
+      dto.targetClassId,
+      institution.id,
+    );
+
+    let targetSectionId: string | null = null;
+    if (dto.targetSectionId) {
+      const section = await this.sectionsService.findByIdForClassOwnership(
+        dto.targetSectionId,
+        targetClass.id,
+      );
+      targetSectionId = section.id;
+    }
+
+    const students = await this.studentsRepository.find({
+      where: { id: In(dto.studentIds), institutionId: institution.id },
+    });
+    if (students.length === 0) {
+      throw new BadRequestException('No matching students to promote');
+    }
+
+    for (const student of students) {
+      student.classId = targetClass.id;
+      student.className = targetClass.name;
+      student.sectionId = targetSectionId;
+    }
+    await this.studentsRepository.save(students);
+
+    return {
+      promoted: students.length,
+      skipped: dto.studentIds.length - students.length,
+    };
   }
 
   async findByUserId(userId: string): Promise<Student> {
