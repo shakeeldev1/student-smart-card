@@ -389,6 +389,16 @@ export class StudentsService {
       classId: _classId,
       sectionId: _sectionId,
       rollNumber,
+      // Guardian fields are pulled out so a school can never change them via
+      // this endpoint; only an admin may amend guardian details afterwards.
+      guardianName,
+      guardianCnic,
+      guardianDateOfBirth,
+      guardianRelationship,
+      guardianMobile,
+      guardianEmail,
+      guardianAddress,
+      guardianCity,
       ...rest
     } = dto;
     if (rollNumber !== undefined) {
@@ -401,6 +411,25 @@ export class StudentsService {
 
     const hadEmail = Boolean(student.email);
     Object.assign(student, rest);
+
+    // Only an admin may edit the guardian on record. A school registers the
+    // guardian at enrollment but cannot change it later; unspecified fields
+    // are left untouched.
+    if (currentUser.role === UserRole.ADMIN) {
+      const guardianPatch = Object.fromEntries(
+        Object.entries({
+          guardianName,
+          guardianCnic,
+          guardianDateOfBirth,
+          guardianRelationship,
+          guardianMobile,
+          guardianEmail,
+          guardianAddress,
+          guardianCity,
+        }).filter(([, value]) => value !== undefined),
+      );
+      Object.assign(student, guardianPatch);
+    }
     const saved = await this.studentsRepository.save(student);
 
     // An email added after registration never received the setup link.
