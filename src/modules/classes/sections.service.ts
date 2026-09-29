@@ -13,6 +13,7 @@ import { Student } from '../students/entities/student.entity';
 import { CreateSectionDto } from './dto/create-section.dto';
 import { UpdateSectionDto } from './dto/update-section.dto';
 import { InstitutionsService } from '../institutions/institutions.service';
+import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { UserRole } from '../users/enums/user-role.enum';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 
@@ -61,6 +62,11 @@ export class SectionsService {
     );
     if (!institution) {
       throw new ForbiddenException('No institution found for this account');
+    }
+    if (institution.approvalStatus !== InstitutionApprovalStatus.APPROVED) {
+      throw new ForbiddenException(
+        'Your institution is pending approval. You can add classes, sections and students once it has been approved.',
+      );
     }
 
     const schoolClass = await this.classesRepository.findOne({

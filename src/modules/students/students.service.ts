@@ -92,6 +92,11 @@ export class StudentsService {
     if (!institution) {
       throw new ForbiddenException('No institution found for this account');
     }
+    if (institution.approvalStatus !== InstitutionApprovalStatus.APPROVED) {
+      throw new ForbiddenException(
+        'Your institution is pending approval. You can add classes, sections and students once it has been approved.',
+      );
+    }
     const institutionId: string | null = institution.id;
     // Students registered directly by a verified school are trusted and
     // skip manual review; a school whose own institution hasn't been
@@ -350,6 +355,11 @@ export class StudentsService {
     );
     if (!institution) {
       throw new ForbiddenException('No institution found for this account');
+    }
+    if (institution.approvalStatus !== InstitutionApprovalStatus.APPROVED) {
+      throw new ForbiddenException(
+        'Your institution is pending approval. You can add classes, sections and students once it has been approved.',
+      );
     }
 
     const targetClass = await this.classesService.findByIdForOwnership(

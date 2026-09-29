@@ -11,6 +11,7 @@ import { Student } from '../students/entities/student.entity';
 import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { InstitutionsService } from '../institutions/institutions.service';
+import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { UserRole } from '../users/enums/user-role.enum';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 
@@ -50,10 +51,28 @@ export class ClassesService {
     currentUser: JwtPayload,
     dto: CreateClassDto,
   ): Promise<SchoolClass> {
-    const institutionId = await this.resolveInstitutionId(
-      currentUser,
-      dto.institutionId,
-    );
+    // Resolve the institution once and reuse it for the approval gate, so a
+    // school never pays for a second identical lookup.
+    let institutionId: string;
+    if (currentUser.role === UserRole.SCHOOL) {
+      const institution = await this.institutionsService.findByOwnerUserId(
+        currentUser.sub,
+      );
+      if (!institution) {
+        throw new ForbiddenException('No institution found for this account');
+      }
+      if (institution.approvalStatus !== InstitutionApprovalStatus.APPROVED) {
+        throw new ForbiddenException(
+          'Your institution is pending approval. You can add classes, sections and students once it has been approved.',
+        );
+      }
+      institutionId = institution.id;
+    } else {
+      institutionId = await this.resolveInstitutionId(
+        currentUser,
+        dto.institutionId,
+      );
+    }
 
     const schoolClass = this.classesRepository.create({
       institutionId,
