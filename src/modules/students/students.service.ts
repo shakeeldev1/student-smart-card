@@ -136,6 +136,7 @@ export class StudentsService {
       region: dto.region ?? null,
       district: dto.district ?? null,
       tehsil: dto.tehsil ?? null,
+      productVariant: dto.productVariant ?? null,
       classId,
       sectionId,
       contactNumber: dto.contactNumber ?? null,

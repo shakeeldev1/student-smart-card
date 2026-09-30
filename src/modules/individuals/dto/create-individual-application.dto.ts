@@ -1,17 +1,24 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
   IsEmail,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { Gender } from '../../students/enums/gender.enum';
 import { NomineeRelationship } from '../enums/nominee-relationship.enum';
 import { normalizeDigits } from '../../../common/transforms/normalize-digits.transform';
+import {
+  MAX_PRODUCT_VARIANT,
+  MIN_PRODUCT_VARIANT,
+} from '../../../common/insurance/coverage.util';
 
 export class CreateIndividualApplicationDto {
   @IsString()
@@ -73,6 +80,14 @@ export class CreateIndividualApplicationDto {
   @IsString()
   @MaxLength(120)
   tehsil?: string;
+
+  // EFU takaful product variant (1–10); coverage = variant × 100,000 PKR.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(MIN_PRODUCT_VARIANT)
+  @Max(MAX_PRODUCT_VARIANT)
+  productVariant?: number;
 
   @IsString()
   @MaxLength(150)

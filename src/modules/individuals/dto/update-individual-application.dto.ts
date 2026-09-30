@@ -1,14 +1,21 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsEmail,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { NomineeRelationship } from '../enums/nominee-relationship.enum';
 import { normalizeDigits } from '../../../common/transforms/normalize-digits.transform';
+import {
+  MAX_PRODUCT_VARIANT,
+  MIN_PRODUCT_VARIANT,
+} from '../../../common/insurance/coverage.util';
 
 export class UpdateIndividualApplicationDto {
   @IsOptional()
@@ -61,6 +68,13 @@ export class UpdateIndividualApplicationDto {
   @IsString()
   @MaxLength(120)
   tehsil?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(MIN_PRODUCT_VARIANT)
+  @Max(MAX_PRODUCT_VARIANT)
+  productVariant?: number;
 
   @IsOptional()
   @IsString()

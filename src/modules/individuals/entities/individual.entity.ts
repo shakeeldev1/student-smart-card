@@ -94,6 +94,13 @@ export class Individual {
   @Column({ type: 'varchar', nullable: true })
   nomineeCity: string | null;
 
+  /**
+   * EFU takaful product variant (1–10). Coverage is derived as
+   * variant × 100,000 PKR — see common/insurance/coverage.util.ts.
+   */
+  @Column({ type: 'int', nullable: true })
+  productVariant: number | null;
+
   @Column({ type: 'boolean', default: true })
   consentEnrollment: boolean;
 

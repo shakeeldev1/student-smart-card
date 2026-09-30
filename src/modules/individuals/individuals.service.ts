@@ -109,6 +109,7 @@ export class IndividualsService {
       region: dto.region ?? null,
       district: dto.district ?? null,
       tehsil: dto.tehsil ?? null,
+      productVariant: dto.productVariant ?? null,
       nomineeName: dto.nomineeName,
       nomineeRelationship: dto.nomineeRelationship,
       nomineeCnic: dto.nomineeCnic,

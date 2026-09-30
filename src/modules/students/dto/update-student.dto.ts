@@ -1,17 +1,24 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsEmail,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { Gender } from '../enums/gender.enum';
 import { GuardianRelationship } from '../enums/guardian-relationship.enum';
 import { normalizeDigits } from '../../../common/transforms/normalize-digits.transform';
+import {
+  MAX_PRODUCT_VARIANT,
+  MIN_PRODUCT_VARIANT,
+} from '../../../common/insurance/coverage.util';
 
 export class UpdateStudentDto {
   @IsOptional()
@@ -59,6 +66,13 @@ export class UpdateStudentDto {
   @IsString()
   @MaxLength(50)
   rollNumber?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(MIN_PRODUCT_VARIANT)
+  @Max(MAX_PRODUCT_VARIANT)
+  productVariant?: number;
 
   @IsOptional()
   @IsString()
