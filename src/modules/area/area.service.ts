@@ -711,6 +711,32 @@ export class AreaService {
     if (dto.isActive !== undefined) {
       await this.usersService.setActive(manager.userId, dto.isActive);
     }
+
+    // Optional reassignment of the level + area. Only when a level is given so
+    // partial contact-only edits never clear the area.
+    if (dto.level !== undefined) {
+      const nextLevel = dto.level;
+      const nextArea = {
+        level: nextLevel,
+        province: dto.province ?? manager.province,
+        region: dto.region ?? manager.region ?? undefined,
+        district: dto.district ?? manager.district ?? undefined,
+        tehsil: dto.tehsil ?? manager.tehsil ?? undefined,
+      };
+      this.validateAreaFields(nextArea);
+      // Null out any tier below the new level so a demoted manager isn't left
+      // with a stale deeper value.
+      const keep = requiredAreaColumns(nextLevel);
+      manager.level = nextLevel;
+      manager.province = nextArea.province;
+      manager.region = keep.includes('region') ? nextArea.region ?? null : null;
+      manager.district = keep.includes('district')
+        ? nextArea.district ?? null
+        : null;
+      manager.tehsil = keep.includes('tehsil') ? nextArea.tehsil ?? null : null;
+      await this.managersRepository.save(manager);
+    }
+
     const user = await this.usersService.findById(manager.userId);
     return this.toDetail(
       manager,
