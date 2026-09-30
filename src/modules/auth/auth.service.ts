@@ -31,8 +31,10 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SetupStudentAccountDto } from './dto/setup-student-account.dto';
+import { SetupAreaManagerDto } from '../area/dto/setup-area-manager.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { Student } from '../students/entities/student.entity';
+import { AreaManager } from '../area/entities/area-manager.entity';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { CardsService } from '../cards/cards.service';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
@@ -50,6 +52,8 @@ export class AuthService {
     private readonly config: ConfigService,
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
+    @InjectRepository(AreaManager)
+    private readonly areaManagersRepository: Repository<AreaManager>,
     private readonly cloudinaryService: CloudinaryService,
     private readonly cardsService: CardsService,
   ) {}
@@ -377,6 +381,51 @@ export class AuthService {
     // Generate tokens
     const tokens = await this.tokenService.issueTokenPair(user);
 
+    return {
+      message: 'Account setup successful',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
+  }
+
+  /**
+   * An area manager sets their password from the emailed setup link. The user
+   * row already exists (created by the admin with a random password), so this
+   * only updates the password, clears the token and logs them in.
+   */
+  async setupAreaManagerAccount(dto: SetupAreaManagerDto) {
+    const manager = await this.areaManagersRepository.findOne({
+      where: { setupToken: dto.token },
+    });
+    if (!manager) {
+      throw new BadRequestException('Invalid or expired setup token');
+    }
+    if (
+      !manager.setupTokenExpiresAt ||
+      manager.setupTokenExpiresAt < new Date()
+    ) {
+      throw new BadRequestException('Setup token has expired');
+    }
+
+    const user = await this.usersService.findById(manager.userId);
+    if (!user) {
+      throw new NotFoundException('Account not found for this setup link');
+    }
+
+    const passwordHash = await this.hashPassword(dto.password);
+    await this.usersService.updatePassword(user.id, passwordHash);
+
+    manager.setupToken = null;
+    manager.setupTokenExpiresAt = null;
+    await this.areaManagersRepository.save(manager);
+
+    const tokens = await this.tokenService.issueTokenPair(user);
     return {
       message: 'Account setup successful',
       user: {

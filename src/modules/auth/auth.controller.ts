@@ -33,6 +33,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SetupStudentAccountDto } from './dto/setup-student-account.dto';
+import { SetupAreaManagerDto } from '../area/dto/setup-area-manager.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { RequestMeta } from './token.service';
 
@@ -113,6 +114,13 @@ export class AuthController {
   @Throttle(AUTH_THROTTLE)
   setupStudentAccount(@Body() dto: SetupStudentAccountDto) {
     return this.authService.setupStudentAccount(dto);
+  }
+
+  @Post('setup-area-manager')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(AUTH_THROTTLE)
+  setupAreaManagerAccount(@Body() dto: SetupAreaManagerDto) {
+    return this.authService.setupAreaManagerAccount(dto);
   }
 
   @Get('me')

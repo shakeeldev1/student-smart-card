@@ -12,4 +12,12 @@ export enum UserRole {
   EFU = 'efu',
   ADMIN = 'admin',
   INDIVIDUAL = 'individual',
+  /**
+   * Geographic oversight accounts, provisioned by an admin and scoped to a
+   * single province / region / district / tehsil. They see aggregate, area-
+   * limited analytics (schools + counts) only — never student personal data.
+   * The exact area is stored on the `area_managers` row for the user, not in
+   * the JWT, so scope changes take effect immediately.
+   */
+  AREA_MANAGER = 'area_manager',
 }
