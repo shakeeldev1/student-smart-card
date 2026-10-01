@@ -2,6 +2,30 @@
 
 This folder contains seed scripts for initializing default admin and operator accounts.
 
+### Demo Dashboard Accounts
+
+Creates or updates one test account for every active dashboard role. All accounts
+use the password `StudentSmartCard@123`.
+
+```bash
+npm run seed:demo
+```
+
+Accounts created:
+
+| Role | Email |
+| --- | --- |
+| Admin | `superadmin@gmail.com` |
+| EFU | `efu@gmail.com` |
+| Operator | `operator@gmail.com` |
+| School | `school@gmail.com` |
+| Student | `student@gmail.com` |
+| Individual | `individual@gmail.com` |
+| Province manager | `provice@gmail.com` |
+| Region manager | `region@gmail.com` |
+| District manager | `district@gmail.com` |
+| Tehsil manager | `tehsil@gmail.com` |
+
 ## Available Seeds
 
 ### Admin Account (EFU Role)

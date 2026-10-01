@@ -23,7 +23,8 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "seed:operator": "ts-node -r tsconfig-paths/register src/database/seeds/create-operator.ts",
-    "seed:admin": "ts-node -r tsconfig-paths/register src/database/seeds/create-admin.ts"
+    "seed:admin": "ts-node -r tsconfig-paths/register src/database/seeds/create-admin.ts",
+    "seed:demo": "ts-node -r tsconfig-paths/register src/database/seeds/create-demo-accounts.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
