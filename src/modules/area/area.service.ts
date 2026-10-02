@@ -338,14 +338,34 @@ export class AreaService {
       .createQueryBuilder('student')
       .select(`student.${column}`, 'name')
       .addSelect('COUNT(*)', 'count')
+      .addSelect(
+        `SUM(CASE WHEN "student"."gender"::text = :genderMale THEN 1 ELSE 0 END)`,
+        'male',
+      )
+      .addSelect(
+        `SUM(CASE WHEN "student"."gender"::text = :genderFemale THEN 1 ELSE 0 END)`,
+        'female',
+      )
       .andWhere(`student.${column} IS NOT NULL`)
       .groupBy(`student.${column}`)
       .orderBy('count', 'DESC')
-      .limit(12);
+      .limit(12)
+      .setParameter('genderMale', Gender.MALE)
+      .setParameter('genderFemale', Gender.FEMALE);
     this.applyScope(qb, 'student', scope);
 
-    const rows = await qb.getRawMany<{ name: string; count: string }>();
-    return rows.map((row) => ({ name: row.name, count: Number(row.count) }));
+    const rows = await qb.getRawMany<{
+      name: string;
+      count: string;
+      male: string;
+      female: string;
+    }>();
+    return rows.map((row) => ({
+      name: row.name,
+      count: Number(row.count),
+      male: Number(row.male),
+      female: Number(row.female),
+    }));
   }
 
   // ---------------------------------------------------------------------------

@@ -296,6 +296,27 @@ export class AuthService {
       };
     }
 
+    // Area managers carry their tier + area so the UI can show a meaningful
+    // title ("Province Manager", "District Manager", …) instead of the raw role.
+    if (user.role === UserRole.AREA_MANAGER) {
+      const manager = await this.areaManagersRepository.findOne({
+        where: { userId: user.id },
+      });
+      return {
+        ...base,
+        areaLevel: manager?.level ?? null,
+        area: manager
+          ? {
+              level: manager.level,
+              province: manager.province,
+              region: manager.region,
+              district: manager.district,
+              tehsil: manager.tehsil,
+            }
+          : null,
+      };
+    }
+
     return base;
   }
 
