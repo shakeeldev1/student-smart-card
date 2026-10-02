@@ -31,4 +31,8 @@ export class CardHolderProfileResponseDto {
   institutionLogoUrl: string | null;
   sectionName: string | null;
   rollNumber: string | null;
+  /** EFU takaful product variant (1–10), or null if unset. */
+  productVariant: number | null;
+  /** Derived coverage in PKR (variant × 100,000), or null if no variant. */
+  coverageAmount: number | null;
 }

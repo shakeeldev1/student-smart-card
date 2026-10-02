@@ -5,6 +5,7 @@ import { Card } from '../cards/entities/card.entity';
 import { CardStatus } from '../cards/enums/card-status.enum';
 import { IndividualCard } from '../individuals/entities/individual-card.entity';
 import { CardHolderProfileResponseDto } from './dto/card-holder-profile-response.dto';
+import { coverageForVariant } from '../../common/insurance/coverage.util';
 
 /**
  * Read-only lookups for the e-commerce integration (SSC). Deliberately kept
@@ -55,6 +56,8 @@ export class EcommerceIntegrationService {
         institutionLogoUrl: student.institution?.logoUrl ?? null,
         sectionName: student.section?.name ?? null,
         rollNumber: student.rollNumber,
+        productVariant: student.productVariant ?? null,
+        coverageAmount: coverageForVariant(student.productVariant),
       };
     }
 
@@ -90,6 +93,8 @@ export class EcommerceIntegrationService {
         institutionLogoUrl: null,
         sectionName: null,
         rollNumber: null,
+        productVariant: individual.productVariant ?? null,
+        coverageAmount: coverageForVariant(individual.productVariant),
       };
     }
 
