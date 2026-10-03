@@ -69,7 +69,7 @@ export class CardsService {
    * both student and individual cards, so numbers are safe to later attach to
    * bank accounts.
    */
-  private async generateStudentCardNumber(
+  async generateCardNumber(
     province?: string | null,
     district?: string | null,
   ): Promise<string> {
@@ -102,7 +102,7 @@ export class CardsService {
     const student = await this.studentsRepository.findOne({
       where: { id: studentId },
     });
-    const cardNumber = await this.generateStudentCardNumber(
+    const cardNumber = await this.generateCardNumber(
       student?.province,
       student?.district,
     );

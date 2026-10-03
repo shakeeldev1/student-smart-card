@@ -26,6 +26,7 @@ import {
   type EmailProvider,
 } from '../email/interfaces/email-provider.interface';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { CardsService } from '../cards/cards.service';
 import type { Multer } from 'multer';
 
 export interface IndividualFilters {
@@ -54,6 +55,7 @@ export class IndividualsService {
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly cardsService: CardsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -285,9 +287,15 @@ export class IndividualsService {
     }
 
     const issuedAt = new Date();
+    // Bank-style 16-digit number (7727 + province + district + 8 random),
+    // unique across both student and individual cards — same scheme as students.
+    const cardNumber = await this.cardsService.generateCardNumber(
+      saved.province,
+      saved.district,
+    );
     const card = this.cardsRepository.create({
       individualId: saved.id,
-      cardNumber: `IND-CARD-${randomBytes(4).toString('hex').toUpperCase()}`,
+      cardNumber,
       status: CardStatus.PENDING_VERIFICATION,
       issuedAt,
       expiresAt: cardExpiryFrom(
