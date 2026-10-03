@@ -98,11 +98,9 @@ export class StudentsService {
       );
     }
     const institutionId: string | null = institution.id;
-    // Students registered directly by a verified school are trusted and
-    // skip manual review; a school whose own institution hasn't been
-    // approved yet still goes through the normal pending queue.
-    const autoApprove =
-      institution.approvalStatus === InstitutionApprovalStatus.APPROVED;
+    // New registration flow: every student goes through payment → admin
+    // verification → EFU approval before a card is issued. Nothing is
+    // auto-approved or auto-carded at registration any more.
 
     if (dto.classId) {
       const schoolClass = await this.classesService.findByIdForOwnership(
@@ -153,17 +151,8 @@ export class StudentsService {
       ...consent,
       institutionId,
       registeredByUserId: currentUser.sub,
-      ...(autoApprove && {
-        status: ApplicationStatus.APPROVED,
-        reviewedAt: new Date(),
-        reviewNote: 'Auto-approved: registered directly by a verified school',
-      }),
     });
-    let saved = await this.studentsRepository.save(student);
-
-    if (autoApprove) {
-      saved = await this.grantCertificateAndCard(saved);
-    }
+    const saved = await this.studentsRepository.save(student);
 
     // Generate setup token and send email
     if (saved.email) {

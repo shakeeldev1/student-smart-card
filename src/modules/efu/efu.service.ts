@@ -1,14 +1,33 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Institution } from '../institutions/entities/institution.entity';
 import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { SchoolClass } from '../classes/entities/school-class.entity';
 import { Student } from '../students/entities/student.entity';
+import { Individual } from '../individuals/entities/individual.entity';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
 import { Gender } from '../students/enums/gender.enum';
+import { StudentsService } from '../students/students.service';
+import { IndividualsService } from '../individuals/individuals.service';
+import { PaymentsService } from '../payments/payments.service';
+import { Payment } from '../payments/entities/payment.entity';
+import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { toCsv } from '../../common/utils/csv.util';
 import { parseDateRange } from '../../common/utils/date-range.util';
+
+export interface PaymentSummary {
+  id: string;
+  status: PaymentStatus;
+  amount: number;
+  reference: string | null;
+  proofImageUrl: string | null;
+  rejectionReason: string | null;
+  reviewedAt: Date | null;
+}
+
+export type StudentWithPayment = Student & { payment: PaymentSummary | null };
+export type IndividualWithPayment = Individual & { payment: PaymentSummary | null };
 
 export interface EfuStudentQuery {
   page?: string;
@@ -22,10 +41,31 @@ export interface EfuStudentQuery {
   gender?: string;
   startDate?: string;
   endDate?: string;
+  /** EFU queue filter: only applications whose payment is in this state. */
+  paymentStatus?: PaymentStatus;
 }
 
 export interface PaginatedStudents {
-  data: Student[];
+  data: StudentWithPayment[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface EfuIndividualQuery {
+  page?: string;
+  limit?: string;
+  search?: string;
+  status?: string;
+  gender?: string;
+  startDate?: string;
+  endDate?: string;
+  paymentStatus?: PaymentStatus;
+}
+
+export interface PaginatedIndividuals {
+  data: IndividualWithPayment[];
   total: number;
   page: number;
   limit: number;
@@ -44,7 +84,39 @@ export class EfuService {
     private readonly classesRepository: Repository<SchoolClass>,
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
+    @InjectRepository(Individual)
+    private readonly individualsRepository: Repository<Individual>,
+    @InjectRepository(Payment)
+    private readonly paymentsRepository: Repository<Payment>,
+    private readonly studentsService: StudentsService,
+    private readonly individualsService: IndividualsService,
+    private readonly paymentsService: PaymentsService,
   ) {}
+
+  private toPaymentSummary(payment: Payment): PaymentSummary {
+    return {
+      id: payment.id,
+      status: payment.status,
+      amount: payment.amount,
+      reference: payment.reference,
+      proofImageUrl: payment.proofImageUrl,
+      rejectionReason: payment.rejectionReason,
+      reviewedAt: payment.reviewedAt,
+    };
+  }
+
+  /** Batch-loads the payment for each student id and returns a map. */
+  private async paymentsByStudent(ids: string[]): Promise<Map<string, PaymentSummary>> {
+    if (ids.length === 0) return new Map();
+    const payments = await this.paymentsRepository.find({ where: { studentId: In(ids) } });
+    return new Map(payments.map((p) => [p.studentId as string, this.toPaymentSummary(p)]));
+  }
+
+  private async paymentsByIndividual(ids: string[]): Promise<Map<string, PaymentSummary>> {
+    if (ids.length === 0) return new Map();
+    const payments = await this.paymentsRepository.find({ where: { individualId: In(ids) } });
+    return new Map(payments.map((p) => [p.individualId as string, this.toPaymentSummary(p)]));
+  }
 
   async getStats() {
     const [schools, classes, students, certificatesIssued, pendingApplications] =
@@ -241,11 +313,25 @@ export class EfuService {
       );
     }
 
+    if (query.paymentStatus) {
+      qb.innerJoin(
+        'payments',
+        'pay',
+        'pay.studentId = student.id AND pay.status = :paymentStatus',
+        { paymentStatus: query.paymentStatus },
+      );
+    }
+
     qb.orderBy('student.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
 
-    const [data, total] = await qb.getManyAndCount();
+    const [rows, total] = await qb.getManyAndCount();
+    const paymentMap = await this.paymentsByStudent(rows.map((s) => s.id));
+    const data: StudentWithPayment[] = rows.map((s) => ({
+      ...s,
+      payment: paymentMap.get(s.id) ?? null,
+    }));
 
     return {
       data,
@@ -256,7 +342,7 @@ export class EfuService {
     };
   }
 
-  async getStudentById(id: string): Promise<Student> {
+  async getStudentById(id: string): Promise<StudentWithPayment> {
     const student = await this.studentsRepository.findOne({
       where: { id },
       relations: {
@@ -269,7 +355,8 @@ export class EfuService {
     if (!student) {
       throw new NotFoundException('Student not found');
     }
-    return student;
+    const payment = await this.paymentsService.getForStudent(student.id);
+    return { ...student, payment: payment ? this.toPaymentSummary(payment) : null };
   }
 
   async getStudentsReportCsv(startDate?: string, endDate?: string): Promise<string> {
@@ -362,5 +449,92 @@ export class EfuService {
         inst.createdAt.toISOString(),
       ]),
     );
+  }
+
+  // ---- EFU individuals queue ----
+
+  async listIndividuals(query: EfuIndividualQuery): Promise<PaginatedIndividuals> {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(MAX_LIMIT, Math.max(1, Number(query.limit) || DEFAULT_LIMIT));
+
+    const qb = this.individualsRepository.createQueryBuilder('individual');
+    if (query.status) qb.andWhere('individual.status = :status', { status: query.status });
+    if (query.gender) qb.andWhere('individual.gender = :gender', { gender: query.gender });
+
+    const { from, to } = parseDateRange(query.startDate, query.endDate);
+    if (from) qb.andWhere('individual.createdAt >= :from', { from });
+    if (to) qb.andWhere('individual.createdAt <= :to', { to });
+
+    if (query.search) {
+      qb.andWhere(
+        '(individual.fullName ILIKE :search OR individual.cnicNumber ILIKE :search)',
+        { search: `%${query.search}%` },
+      );
+    }
+    if (query.paymentStatus) {
+      qb.innerJoin(
+        'payments',
+        'pay',
+        'pay.individualId = individual.id AND pay.status = :paymentStatus',
+        { paymentStatus: query.paymentStatus },
+      );
+    }
+
+    qb.orderBy('individual.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [rows, total] = await qb.getManyAndCount();
+    const paymentMap = await this.paymentsByIndividual(rows.map((r) => r.id));
+    const data: IndividualWithPayment[] = rows.map((r) => ({
+      ...r,
+      payment: paymentMap.get(r.id) ?? null,
+    }));
+
+    return { data, total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) };
+  }
+
+  async getIndividualById(id: string): Promise<IndividualWithPayment> {
+    const individual = await this.individualsRepository.findOne({
+      where: { id },
+      relations: { card: true },
+    });
+    if (!individual) {
+      throw new NotFoundException('Individual not found');
+    }
+    const payment = await this.paymentsService.getForIndividual(id);
+    return { ...individual, payment: payment ? this.toPaymentSummary(payment) : null };
+  }
+
+  // ---- EFU decisions (approval is gated on a confirmed payment) ----
+
+  async approveStudent(efuUserId: string, id: string): Promise<Student> {
+    if (!(await this.paymentsService.isConfirmedForStudent(id))) {
+      throw new BadRequestException('Payment must be confirmed before this application can be approved.');
+    }
+    return this.studentsService.approve(efuUserId, id);
+  }
+
+  rejectStudent(efuUserId: string, id: string, reason?: string): Promise<Student> {
+    return this.studentsService.reject(efuUserId, id, reason);
+  }
+
+  requestStudentChanges(efuUserId: string, id: string, reason: string): Promise<Student> {
+    return this.studentsService.requestChanges(efuUserId, id, reason);
+  }
+
+  async approveIndividual(efuUserId: string, id: string): Promise<Individual> {
+    if (!(await this.paymentsService.isConfirmedForIndividual(id))) {
+      throw new BadRequestException('Payment must be confirmed before this application can be approved.');
+    }
+    return this.individualsService.approve(efuUserId, id);
+  }
+
+  rejectIndividual(efuUserId: string, id: string, reason?: string): Promise<Individual> {
+    return this.individualsService.reject(efuUserId, id, reason);
+  }
+
+  requestIndividualChanges(efuUserId: string, id: string, reason: string): Promise<Individual> {
+    return this.individualsService.requestChanges(efuUserId, id, reason);
   }
 }

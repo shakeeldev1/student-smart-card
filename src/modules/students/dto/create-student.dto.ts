@@ -67,13 +67,13 @@ export class CreateStudentDto {
   @MaxLength(50)
   rollNumber?: string;
 
-  // EFU takaful product variant (1–10); coverage = variant × 100,000 PKR.
-  @IsOptional()
+  // EFU takaful product variant (1–10). Required: it sets both the coverage
+  // (variant × 100,000) and the registration fee (variant × 1,000).
   @Type(() => Number)
   @IsInt()
   @Min(MIN_PRODUCT_VARIANT)
   @Max(MAX_PRODUCT_VARIANT)
-  productVariant?: number;
+  productVariant: number;
 
   @IsOptional()
   @IsString()

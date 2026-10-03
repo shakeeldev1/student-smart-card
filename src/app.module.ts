@@ -20,6 +20,7 @@ import { ClassesModule } from './modules/classes/classes.module';
 import { IndividualsModule } from './modules/individuals/individuals.module';
 import { EfuModule } from './modules/efu/efu.module';
 import { AreaModule } from './modules/area/area.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { EcommerceIntegrationModule } from './modules/ecommerce-integration/ecommerce-integration.module';
 
 @Module({
@@ -70,6 +71,7 @@ import { EcommerceIntegrationModule } from './modules/ecommerce-integration/ecom
     IndividualsModule,
     EfuModule,
     AreaModule,
+    PaymentsModule,
     EcommerceIntegrationModule,
   ],
   controllers: [AppController],
