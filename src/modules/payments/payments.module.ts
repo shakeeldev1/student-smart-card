@@ -7,13 +7,14 @@ import { Payment } from './entities/payment.entity';
 import { PaymentSettings } from './entities/payment-settings.entity';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
+import { PublicPaymentsController } from './public-payments.controller';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Payment, PaymentSettings, Student, Individual]),
     CloudinaryModule,
   ],
-  controllers: [PaymentsController],
+  controllers: [PaymentsController, PublicPaymentsController],
   providers: [PaymentsService],
   exports: [PaymentsService],
 })

@@ -54,6 +54,16 @@ export class Payment {
   @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.PENDING })
   status: PaymentStatus;
 
+  /**
+   * Groups payments made together as one combined transfer (a school paying for
+   * several students at once with a single proof). Null for a standalone
+   * payment. Rows sharing a batchId share proof, reference and are confirmed /
+   * rejected together.
+   */
+  @Index()
+  @Column({ type: 'uuid', nullable: true })
+  batchId: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   proofImageUrl: string | null;
 

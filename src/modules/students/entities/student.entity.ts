@@ -181,6 +181,14 @@ export class Student {
   @OneToOne(() => Card, (card) => card.student)
   card?: Card;
 
+  /**
+   * Unguessable token for the public payment/tracking link a school can share
+   * with a student or parent (no login required). Generated at enrollment.
+   */
+  @Index({ unique: true })
+  @Column({ type: 'varchar', nullable: true })
+  publicToken: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   setupToken: string | null;
 

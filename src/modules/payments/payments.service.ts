@@ -5,7 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import type { Multer } from 'multer';
 import { registrationFeeForVariant } from '../../common/payments/registration-fee.util';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
@@ -141,29 +142,57 @@ export class PaymentsService {
     dto: SubmitPaymentDto,
     file: Multer.File,
   ): Promise<Payment> {
-    const existing = await this.paymentsRepository.findOne({ where: key });
-    if (existing?.status === PaymentStatus.CONFIRMED) {
-      throw new BadRequestException('This registration has already been paid and confirmed.');
-    }
-
     const uploaded = await this.cloudinary.uploadBuffer(
       file.buffer,
       'payment-proofs',
       file.originalname,
     );
+    return this.upsertWithProof(key, productVariant, amount, {
+      proofImageUrl: uploaded.url,
+      proofImagePublicId: uploaded.publicId,
+      reference: dto.reference ?? null,
+      batchId: null,
+    });
+  }
+
+  /**
+   * Creates or resets a payment row to PENDING with the given (already uploaded)
+   * proof. Shared by single and batch submissions. A CONFIRMED payment is never
+   * overwritten.
+   */
+  private async upsertWithProof(
+    key: { studentId?: string; individualId?: string },
+    productVariant: number,
+    amount: number,
+    proof: {
+      proofImageUrl: string;
+      proofImagePublicId: string | null;
+      reference: string | null;
+      batchId: string | null;
+    },
+  ): Promise<Payment> {
+    const existing = await this.paymentsRepository.findOne({ where: key });
+    if (existing?.status === PaymentStatus.CONFIRMED) {
+      throw new BadRequestException('This registration has already been paid and confirmed.');
+    }
 
     if (existing) {
       // Replace the previous (rejected/pending) proof and reset to pending.
-      if (existing.proofImagePublicId) {
+      // Don't destroy a proof that's shared with other rows of the same batch.
+      if (
+        existing.proofImagePublicId &&
+        existing.proofImagePublicId !== proof.proofImagePublicId
+      ) {
         await this.cloudinary.destroy(existing.proofImagePublicId);
       }
       existing.amount = amount;
       existing.productVariant = productVariant;
       existing.method = PaymentMethod.MANUAL_BANK_TRANSFER;
       existing.status = PaymentStatus.PENDING;
-      existing.proofImageUrl = uploaded.url;
-      existing.proofImagePublicId = uploaded.publicId;
-      existing.reference = dto.reference ?? null;
+      existing.proofImageUrl = proof.proofImageUrl;
+      existing.proofImagePublicId = proof.proofImagePublicId;
+      existing.reference = proof.reference;
+      existing.batchId = proof.batchId;
       existing.reviewedByUserId = null;
       existing.reviewedAt = null;
       existing.rejectionReason = null;
@@ -177,11 +206,233 @@ export class PaymentsService {
         productVariant,
         method: PaymentMethod.MANUAL_BANK_TRANSFER,
         status: PaymentStatus.PENDING,
-        proofImageUrl: uploaded.url,
-        proofImagePublicId: uploaded.publicId,
-        reference: dto.reference ?? null,
+        proofImageUrl: proof.proofImageUrl,
+        proofImagePublicId: proof.proofImagePublicId,
+        reference: proof.reference,
+        batchId: proof.batchId,
       }),
     );
+  }
+
+  // ---- School: outstanding fees + combined (batch) payment ----
+
+  /**
+   * Lists the school's students with their payment status and fee, plus the
+   * outstanding total (students with no payment or a rejected one).
+   */
+  async getSchoolOutstanding(actor: JwtPayload): Promise<{
+    items: Array<{
+      id: string;
+      fullName: string;
+      className: string;
+      sectionName: string | null;
+      productVariant: number | null;
+      fee: number | null;
+      paymentStatus: 'none' | 'pending' | 'confirmed' | 'rejected';
+      needsPayment: boolean;
+    }>;
+    totalOutstanding: number;
+    outstandingCount: number;
+  }> {
+    const students = await this.studentsRepository.find({
+      where: { institution: { ownerUserId: actor.sub } },
+      relations: { institution: true, section: true },
+      order: { createdAt: 'DESC' },
+    });
+    const ids = students.map((s) => s.id);
+    const payments = ids.length
+      ? await this.paymentsRepository.find({ where: { studentId: In(ids) } })
+      : [];
+    const byStudent = new Map(payments.map((p) => [p.studentId as string, p]));
+
+    let totalOutstanding = 0;
+    let outstandingCount = 0;
+    const items = students.map((s) => {
+      const payment = byStudent.get(s.id);
+      const paymentStatus = payment ? payment.status : 'none';
+      const needsPayment =
+        paymentStatus === 'none' || paymentStatus === PaymentStatus.REJECTED;
+      const fee = registrationFeeForVariant(s.productVariant);
+      if (needsPayment && fee) {
+        totalOutstanding += fee;
+        outstandingCount += 1;
+      }
+      return {
+        id: s.id,
+        fullName: s.fullName,
+        className: s.className,
+        sectionName: s.section?.name ?? null,
+        productVariant: s.productVariant,
+        fee,
+        paymentStatus: paymentStatus as 'none' | 'pending' | 'confirmed' | 'rejected',
+        needsPayment,
+      };
+    });
+
+    return { items, totalOutstanding, outstandingCount };
+  }
+
+  /**
+   * One combined transfer for several students: a single proof is shared across
+   * one payment row per student (same batchId), confirmed/rejected together.
+   */
+  async submitBatchForStudents(
+    actor: JwtPayload,
+    studentIds: string[],
+    reference: string | undefined,
+    file: Multer.File,
+  ): Promise<{ batchId: string; count: number; totalAmount: number }> {
+    const unique = [...new Set(studentIds)].filter(Boolean);
+    if (unique.length === 0) {
+      throw new BadRequestException('Select at least one student to pay for.');
+    }
+
+    const students = await this.studentsRepository.find({
+      where: { id: In(unique) },
+      relations: { institution: true },
+    });
+    if (students.length !== unique.length) {
+      throw new NotFoundException('One or more selected students were not found.');
+    }
+
+    for (const student of students) {
+      if (actor.role !== UserRole.ADMIN && student.institution?.ownerUserId !== actor.sub) {
+        throw new ForbiddenException('One or more students do not belong to your school.');
+      }
+    }
+
+    // Snapshot each fee; block the batch if any selected student has no variant.
+    const fees = students.map((s) => ({ student: s, amount: this.requireFee(s.productVariant) }));
+
+    // Skip any student already confirmed (nothing to pay).
+    const existing = await this.paymentsRepository.find({
+      where: { studentId: In(unique) },
+    });
+    const confirmed = new Set(
+      existing.filter((p) => p.status === PaymentStatus.CONFIRMED).map((p) => p.studentId),
+    );
+    const payable = fees.filter((f) => !confirmed.has(f.student.id));
+    if (payable.length === 0) {
+      throw new BadRequestException('All selected students are already paid and confirmed.');
+    }
+
+    const uploaded = await this.cloudinary.uploadBuffer(
+      file.buffer,
+      'payment-proofs',
+      file.originalname,
+    );
+    const batchId = randomUUID();
+
+    let totalAmount = 0;
+    for (const { student, amount } of payable) {
+      await this.upsertWithProof({ studentId: student.id }, student.productVariant as number, amount, {
+        proofImageUrl: uploaded.url,
+        proofImagePublicId: uploaded.publicId,
+        reference: reference ?? null,
+        batchId,
+      });
+      totalAmount += amount;
+    }
+
+    return { batchId, count: payable.length, totalAmount };
+  }
+
+  async confirmBatch(batchId: string, adminId: string): Promise<{ count: number }> {
+    const rows = await this.paymentsRepository.find({ where: { batchId } });
+    if (rows.length === 0) {
+      throw new NotFoundException('Payment batch not found');
+    }
+    let count = 0;
+    for (const payment of rows) {
+      if (payment.status !== PaymentStatus.PENDING) continue;
+      payment.status = PaymentStatus.CONFIRMED;
+      payment.reviewedByUserId = adminId;
+      payment.reviewedAt = new Date();
+      payment.rejectionReason = null;
+      await this.paymentsRepository.save(payment);
+      count += 1;
+    }
+    return { count };
+  }
+
+  async rejectBatch(batchId: string, adminId: string, reason?: string): Promise<{ count: number }> {
+    const rows = await this.paymentsRepository.find({ where: { batchId } });
+    if (rows.length === 0) {
+      throw new NotFoundException('Payment batch not found');
+    }
+    let count = 0;
+    for (const payment of rows) {
+      if (payment.status !== PaymentStatus.PENDING) continue;
+      payment.status = PaymentStatus.REJECTED;
+      payment.reviewedByUserId = adminId;
+      payment.reviewedAt = new Date();
+      payment.rejectionReason = reason ?? null;
+      await this.paymentsRepository.save(payment);
+      count += 1;
+    }
+    return { count };
+  }
+
+  // ---- Public (no-login) payment/tracking link for a school student ----
+
+  async getPublicApplication(token: string): Promise<{
+    student: {
+      id: string;
+      fullName: string;
+      className: string;
+      sectionName: string | null;
+      institutionName: string | null;
+      productVariant: number | null;
+      status: string;
+      certificateIssued: boolean;
+      card: { cardNumber: string; status: string } | null;
+    };
+    payment: Payment | null;
+    settings: PaymentSettings;
+    fee: number | null;
+  }> {
+    const student = await this.studentsRepository.findOne({
+      where: { publicToken: token },
+      relations: { institution: true, section: true, card: true },
+    });
+    if (!student) {
+      throw new NotFoundException('This link is invalid or has expired.');
+    }
+    const [payment, settings] = await Promise.all([
+      this.getForStudent(student.id),
+      this.getSettings(),
+    ]);
+    return {
+      student: {
+        id: student.id,
+        fullName: student.fullName,
+        className: student.className,
+        sectionName: student.section?.name ?? null,
+        institutionName: student.institution?.name ?? student.institutionNameFreeText ?? null,
+        productVariant: student.productVariant,
+        status: student.status,
+        certificateIssued: student.certificateIssued,
+        card: student.card
+          ? { cardNumber: student.card.cardNumber, status: student.card.status }
+          : null,
+      },
+      payment,
+      settings,
+      fee: registrationFeeForVariant(student.productVariant),
+    };
+  }
+
+  async submitByPublicToken(
+    token: string,
+    dto: SubmitPaymentDto,
+    file: Multer.File,
+  ): Promise<Payment> {
+    const student = await this.studentsRepository.findOne({ where: { publicToken: token } });
+    if (!student) {
+      throw new NotFoundException('This link is invalid or has expired.');
+    }
+    const amount = this.requireFee(student.productVariant);
+    return this.upsert({ studentId: student.id }, student.productVariant as number, amount, dto, file);
   }
 
   // ---- Admin verification ----

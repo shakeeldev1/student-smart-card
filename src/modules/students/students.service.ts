@@ -151,6 +151,7 @@ export class StudentsService {
       ...consent,
       institutionId,
       registeredByUserId: currentUser.sub,
+      publicToken: randomBytes(24).toString('hex'),
     });
     const saved = await this.studentsRepository.save(student);
 

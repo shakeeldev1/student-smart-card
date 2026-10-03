@@ -24,6 +24,7 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { PaymentsService } from './payments.service';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { SubmitPaymentDto } from './dto/submit-payment.dto';
+import { SubmitBatchPaymentDto } from './dto/submit-batch-payment.dto';
 import { RejectPaymentDto } from './dto/reject-payment.dto';
 import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
 
@@ -83,6 +84,29 @@ export class PaymentsController {
 
   // ---- School: pay for a student ----
 
+  // Static routes must precede the ':studentId' param route below.
+  @Get('students/outstanding')
+  @Roles(UserRole.SCHOOL)
+  getOutstanding(@CurrentUser() user: JwtPayload) {
+    return this.paymentsService.getSchoolOutstanding(user);
+  }
+
+  @Post('students/batch')
+  @Roles(UserRole.SCHOOL, UserRole.ADMIN)
+  @proofUpload('proof')
+  submitBatch(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: SubmitBatchPaymentDto,
+    @UploadedFile() file?: Multer.File,
+  ) {
+    return this.paymentsService.submitBatchForStudents(
+      user,
+      dto.studentIds,
+      dto.reference,
+      assertImage(file),
+    );
+  }
+
   @Get('students/:studentId')
   @Roles(UserRole.SCHOOL, UserRole.ADMIN)
   getForStudent(@Param('studentId') studentId: string) {
@@ -130,6 +154,22 @@ export class PaymentsController {
     @Query('limit') limit?: string,
   ) {
     return this.paymentsService.listForAdmin({ status, page, limit });
+  }
+
+  @Patch('batch/:batchId/confirm')
+  @Roles(UserRole.ADMIN)
+  confirmBatch(@CurrentUser('sub') adminId: string, @Param('batchId') batchId: string) {
+    return this.paymentsService.confirmBatch(batchId, adminId);
+  }
+
+  @Patch('batch/:batchId/reject')
+  @Roles(UserRole.ADMIN)
+  rejectBatch(
+    @CurrentUser('sub') adminId: string,
+    @Param('batchId') batchId: string,
+    @Body() dto: RejectPaymentDto,
+  ) {
+    return this.paymentsService.rejectBatch(batchId, adminId, dto.reason);
   }
 
   @Patch(':id/confirm')
