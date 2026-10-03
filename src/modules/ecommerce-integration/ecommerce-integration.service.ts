@@ -58,6 +58,20 @@ export class EcommerceIntegrationService {
         rollNumber: student.rollNumber,
         productVariant: student.productVariant ?? null,
         coverageAmount: coverageForVariant(student.productVariant),
+        fatherName: student.fatherName ?? null,
+        bFormNumber: student.bFormNumber ?? null,
+        cnicNumber: null,
+        address: student.guardianAddress ?? null,
+        city: student.guardianCity ?? null,
+        guardianName: student.guardianName ?? null,
+        guardianRelationship: student.guardianRelationship ?? null,
+        guardianMobile: student.guardianMobile ?? null,
+        nomineeName: null,
+        nomineeRelationship: null,
+        nomineeMobile: null,
+        institutionAddress: student.institution?.address ?? null,
+        institutionCity: student.institution?.city ?? null,
+        institutionContact: student.institution?.contactNumber ?? null,
       };
     }
 
@@ -95,6 +109,20 @@ export class EcommerceIntegrationService {
         rollNumber: null,
         productVariant: individual.productVariant ?? null,
         coverageAmount: coverageForVariant(individual.productVariant),
+        fatherName: individual.fatherName ?? null,
+        bFormNumber: null,
+        cnicNumber: individual.cnicNumber ?? null,
+        address: individual.address ?? null,
+        city: individual.city ?? null,
+        guardianName: null,
+        guardianRelationship: null,
+        guardianMobile: null,
+        nomineeName: individual.nomineeName ?? null,
+        nomineeRelationship: individual.nomineeRelationship ?? null,
+        nomineeMobile: individual.nomineeMobile ?? null,
+        institutionAddress: null,
+        institutionCity: null,
+        institutionContact: null,
       };
     }
 
