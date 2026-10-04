@@ -14,12 +14,40 @@ export class NodemailerEmailService implements EmailProvider, OnModuleInit {
   private readonly logger = new Logger(NodemailerEmailService.name);
   private transporter: Transporter<SMTPTransport.SentMessageInfo>;
   private mailFrom: string;
+  private replyTo?: string;
+  /** Envelope MAIL FROM address (bounce address) — kept aligned with From. */
+  private envelopeFrom?: string;
 
   constructor(private readonly config: ConfigService) {}
 
+  /** Extracts the bare email address from a "Name <email>" string. */
+  private addressOf(value?: string): string | undefined {
+    if (!value) return undefined;
+    const match = value.match(/<([^>]+)>/);
+    return (match ? match[1] : value).trim() || undefined;
+  }
+
   async onModuleInit(): Promise<void> {
     this.mailFrom = this.config.get<string>('MAIL_FROM')!;
+    this.envelopeFrom = this.addressOf(this.mailFrom);
+    this.replyTo =
+      this.config.get<string>('MAIL_REPLY_TO') || this.envelopeFrom;
     const smtpHost = this.config.get<string>('SMTP_HOST');
+
+    // DKIM-sign outgoing mail when a key is configured. This is one of the
+    // biggest levers for landing in the inbox instead of spam.
+    const dkimDomain = this.config.get<string>('DKIM_DOMAIN');
+    const dkimSelector = this.config.get<string>('DKIM_SELECTOR');
+    const dkimKey = this.config.get<string>('DKIM_PRIVATE_KEY');
+    const dkim =
+      dkimDomain && dkimSelector && dkimKey
+        ? {
+            domainName: dkimDomain,
+            keySelector: dkimSelector,
+            // Allow the key to be supplied with literal "\n" in env files.
+            privateKey: dkimKey.replace(/\\n/g, '\n'),
+          }
+        : undefined;
 
     if (smtpHost) {
       this.transporter = nodemailer.createTransport({
@@ -32,8 +60,12 @@ export class NodemailerEmailService implements EmailProvider, OnModuleInit {
               pass: this.config.get<string>('SMTP_PASSWORD'),
             }
           : undefined,
+        ...(dkim ? { dkim } : {}),
       });
-      this.logger.log(`Email transport configured for SMTP host ${smtpHost}`);
+      this.logger.log(
+        `Email transport configured for SMTP host ${smtpHost}` +
+          (dkim ? ' (DKIM signing enabled)' : ' (no DKIM key — set DKIM_* for better deliverability)'),
+      );
       return;
     }
 
@@ -58,6 +90,12 @@ export class NodemailerEmailService implements EmailProvider, OnModuleInit {
     const info = await this.transporter.sendMail({
       from: this.mailFrom,
       to: options.to,
+      replyTo: this.replyTo,
+      // Align the SMTP envelope (bounce) address with the From domain so SPF
+      // checks pass on the visible From domain.
+      ...(this.envelopeFrom
+        ? { envelope: { from: this.envelopeFrom, to: options.to } }
+        : {}),
       subject: options.subject,
       text: options.text,
       html: options.html,

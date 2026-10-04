@@ -34,8 +34,16 @@ export const envValidationSchema = Joi.object({
   MAIL_FROM: Joi.string().default(
     'Student Smart Card <no-reply@studentsmartcard.pk>',
   ),
+  // Where replies should go (helps deliverability + user trust). Defaults to
+  // MAIL_FROM's address when unset.
+  MAIL_REPLY_TO: Joi.string().allow('').default(''),
+  // DKIM signing (optional but strongly recommended for inbox placement).
+  // Set all three to sign outgoing mail with your domain key.
+  DKIM_DOMAIN: Joi.string().allow('').default(''),
+  DKIM_SELECTOR: Joi.string().allow('').default(''),
+  DKIM_PRIVATE_KEY: Joi.string().allow('').default(''),
 
-  CORS_ORIGIN: Joi.string().default('http://localhost:5173'),
+  CORS_ORIGIN: Joi.string().default('https://studentsmartcardpak.com'),
   FRONTEND_URL: Joi.string().uri().optional(),
 
   CLOUDINARY_CLOUD_NAME: Joi.string().allow('').default(''),
