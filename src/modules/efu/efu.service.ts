@@ -313,14 +313,14 @@ export class EfuService {
       );
     }
 
-    if (query.paymentStatus) {
-      qb.innerJoin(
-        'payments',
-        'pay',
-        'pay.studentId = student.id AND pay.status = :paymentStatus',
-        { paymentStatus: query.paymentStatus },
-      );
-    }
+    // EFU only ever sees applications the admin has already approved
+    // (payment confirmed). Unpaid / unverified applications never reach the queue.
+    qb.innerJoin(
+      'payments',
+      'pay',
+      'pay.studentId = student.id AND pay.status = :confirmedPayment',
+      { confirmedPayment: PaymentStatus.CONFIRMED },
+    );
 
     qb.orderBy('student.createdAt', 'DESC')
       .skip((page - 1) * limit)
@@ -471,14 +471,14 @@ export class EfuService {
         { search: `%${query.search}%` },
       );
     }
-    if (query.paymentStatus) {
-      qb.innerJoin(
-        'payments',
-        'pay',
-        'pay.individualId = individual.id AND pay.status = :paymentStatus',
-        { paymentStatus: query.paymentStatus },
-      );
-    }
+    // EFU only ever sees applications the admin has already approved
+    // (payment confirmed). Unpaid / unverified applications never reach the queue.
+    qb.innerJoin(
+      'payments',
+      'pay',
+      'pay.individualId = individual.id AND pay.status = :confirmedPayment',
+      { confirmedPayment: PaymentStatus.CONFIRMED },
+    );
 
     qb.orderBy('individual.createdAt', 'DESC')
       .skip((page - 1) * limit)
