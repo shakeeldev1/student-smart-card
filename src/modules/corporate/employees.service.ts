@@ -17,6 +17,7 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { CompaniesService } from './companies.service';
 import { CardsService } from '../cards/cards.service';
 import { PaymentsService } from '../payments/payments.service';
+import { registrationFeeForVariant } from '../../common/payments/registration-fee.util';
 import { Payment } from '../payments/entities/payment.entity';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
@@ -271,6 +272,31 @@ export class EmployeesService {
   async remove(currentUser: JwtPayload, id: string): Promise<void> {
     const employee = await this.findOneForUser(currentUser, id);
     await this.employeesRepository.remove(employee);
+  }
+
+  /** Emails the public pay/track link to the employee. */
+  async sendPaymentLink(
+    currentUser: JwtPayload,
+    id: string,
+  ): Promise<{ message: string }> {
+    const employee = await this.findOneForUser(currentUser, id);
+    if (!employee.email) {
+      throw new BadRequestException('No email address on file for this employee');
+    }
+    if (!employee.publicToken) {
+      throw new BadRequestException('No tracking link is available for this employee');
+    }
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
+    const link = `${frontendUrl}/track/${employee.publicToken}`;
+    const fee = registrationFeeForVariant(employee.productVariant);
+    await this.emailService.sendPaymentLinkEmail(
+      employee.email,
+      employee.fullName,
+      link,
+      fee ? `PKR ${fee.toLocaleString('en-PK')}` : undefined,
+    );
+    return { message: `Payment link sent to ${employee.email}` };
   }
 
   // ---- EFU queue ----

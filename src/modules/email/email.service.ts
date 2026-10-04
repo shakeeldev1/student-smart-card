@@ -148,6 +148,31 @@ export class NodemailerEmailService implements EmailProvider, OnModuleInit {
     });
   }
 
+  async sendPaymentLinkEmail(
+    to: string,
+    name: string,
+    trackLink: string,
+    feeLabel?: string,
+  ): Promise<void> {
+    const feeLine = feeLabel ? ` of ${feeLabel}` : '';
+    await this.sendMail({
+      to,
+      subject: 'Complete your Student Smart Card registration payment',
+      text: `Hello ${name},\n\nYour Student Smart Card registration is ready for payment${feeLine}. Use the secure link below to view the payment details, pay, and track your application status:\n\n${trackLink}\n\nNo login is required. If you did not expect this, you can ignore this email.`,
+      html: `
+        <p>Hello ${name},</p>
+        <p>Your Student Smart Card registration is ready for payment${feeLine}. Use the secure link below to view the payment details, pay, and track your application status — no login required.</p>
+        <p style="margin:30px 0;">
+          <a href="${trackLink}" style="background-color:#C9A84C;color:#0A1628;padding:12px 30px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+            Pay &amp; Track Application
+          </a>
+        </p>
+        <p style="color:#666;font-size:12px;">Or open this link: ${trackLink}</p>
+        <p style="color:#666;font-size:12px;">If you did not expect this, you can ignore this email.</p>
+      `,
+    });
+  }
+
   async sendStudentSetupEmail(
     to: string,
     studentName: string,

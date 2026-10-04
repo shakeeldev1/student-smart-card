@@ -20,6 +20,12 @@ export interface EmailProvider {
     studentName: string,
     setupLink: string,
   ): Promise<void>;
+  sendPaymentLinkEmail(
+    to: string,
+    name: string,
+    trackLink: string,
+    feeLabel?: string,
+  ): Promise<void>;
   sendMail(options: SendMailOptions): Promise<void>;
 }
 

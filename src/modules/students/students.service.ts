@@ -27,6 +27,7 @@ import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { ApplicationStatus } from './enums/application-status.enum';
 import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { parseDateRange } from '../../common/utils/date-range.util';
+import { registrationFeeForVariant } from '../../common/payments/registration-fee.util';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import type { Multer } from 'multer';
 
@@ -226,6 +227,34 @@ export class StudentsService {
       student.fullName,
       setupLink,
     );
+  }
+
+  /** Emails the public pay/track link to the student (or their guardian). */
+  async sendPaymentLink(
+    currentUser: JwtPayload,
+    id: string,
+  ): Promise<{ message: string }> {
+    const student = await this.findOneForUser(currentUser, id);
+    const recipient = student.email || student.guardianEmail;
+    if (!recipient) {
+      throw new BadRequestException(
+        'No email address on file for this student or guardian',
+      );
+    }
+    if (!student.publicToken) {
+      throw new BadRequestException('No tracking link is available for this student');
+    }
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
+    const link = `${frontendUrl}/track/${student.publicToken}`;
+    const fee = registrationFeeForVariant(student.productVariant);
+    await this.emailService.sendPaymentLinkEmail(
+      recipient,
+      student.fullName,
+      link,
+      fee ? `PKR ${fee.toLocaleString('en-PK')}` : undefined,
+    );
+    return { message: `Payment link sent to ${recipient}` };
   }
 
   async findAllForUser(

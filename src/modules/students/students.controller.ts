@@ -152,6 +152,14 @@ export class StudentsController {
     return this.studentsService.resendSetupEmail(user, id);
   }
 
+  @Post(':id/send-payment-link')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SCHOOL, UserRole.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  sendPaymentLink(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.studentsService.sendPaymentLink(user, id);
+  }
+
   @Patch('me')
   @UseGuards(RolesGuard)
   @Roles(UserRole.STUDENT)

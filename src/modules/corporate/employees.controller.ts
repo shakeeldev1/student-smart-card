@@ -177,6 +177,12 @@ export class EmployeesController {
     return this.employeesService.resendSetupEmail(user, id);
   }
 
+  @Post(':id/send-payment-link')
+  @Roles(UserRole.CORPORATE, UserRole.ADMIN)
+  sendPaymentLink(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.employeesService.sendPaymentLink(user, id);
+  }
+
   @Delete(':id')
   @Roles(UserRole.CORPORATE, UserRole.ADMIN)
   remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
