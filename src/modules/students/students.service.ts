@@ -15,6 +15,7 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { UpdateOwnStudentProfileDto } from './dto/update-own-student-profile.dto';
 import { InstitutionsService } from '../institutions/institutions.service';
+import { UsersService } from '../users/users.service';
 import { CardsService } from '../cards/cards.service';
 import { ClassesService } from '../classes/classes.service';
 import { SectionsService } from '../classes/sections.service';
@@ -48,6 +49,7 @@ export class StudentsService {
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
     private readonly institutionsService: InstitutionsService,
+    private readonly usersService: UsersService,
     private readonly cardsService: CardsService,
     private readonly classesService: ClassesService,
     private readonly sectionsService: SectionsService,
@@ -68,6 +70,17 @@ export class StudentsService {
       throw new ConflictException(
         'A student with this B-Form number already exists',
       );
+    }
+
+    // Catch an email clash now (at enrollment) rather than later when the
+    // student tries to set their password.
+    if (dto.email) {
+      const emailOwner = await this.usersService.findByEmail(dto.email);
+      if (emailOwner) {
+        throw new ConflictException(
+          'A user with this email already exists. Please use a different email.',
+        );
+      }
     }
 
     // Students are enrolled only by their school. (Adults without a school
@@ -493,6 +506,14 @@ export class StudentsService {
     }
 
     const hadEmail = Boolean(student.email);
+    if (rest.email && rest.email !== student.email) {
+      const emailOwner = await this.usersService.findByEmail(rest.email);
+      if (emailOwner && emailOwner.id !== student.userId) {
+        throw new ConflictException(
+          'A user with this email already exists. Please use a different email.',
+        );
+      }
+    }
     Object.assign(student, rest);
 
     // Only an admin may edit the guardian on record. A school registers the

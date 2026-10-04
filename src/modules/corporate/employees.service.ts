@@ -17,6 +17,7 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { CompaniesService } from './companies.service';
 import { CardsService } from '../cards/cards.service';
 import { PaymentsService } from '../payments/payments.service';
+import { UsersService } from '../users/users.service';
 import { registrationFeeForVariant } from '../../common/payments/registration-fee.util';
 import { Payment } from '../payments/entities/payment.entity';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
@@ -79,6 +80,7 @@ export class EmployeesService {
     private readonly companiesService: CompaniesService,
     private readonly cardsService: CardsService,
     private readonly paymentsService: PaymentsService,
+    private readonly usersService: UsersService,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
     private readonly cloudinaryService: CloudinaryService,
@@ -105,6 +107,16 @@ export class EmployeesService {
     });
     if (existing) {
       throw new ConflictException('An employee with this CNIC already exists');
+    }
+
+    // Catch an email clash now (at enrollment) rather than later at password setup.
+    if (dto.email) {
+      const emailOwner = await this.usersService.findByEmail(dto.email);
+      if (emailOwner) {
+        throw new ConflictException(
+          'A user with this email already exists. Please use a different email.',
+        );
+      }
     }
 
     const employee = this.employeesRepository.create({
@@ -260,6 +272,14 @@ export class EmployeesService {
   ): Promise<Employee> {
     const employee = await this.findOneForUser(currentUser, id);
     const hadEmail = Boolean(employee.email);
+    if (dto.email && dto.email !== employee.email) {
+      const emailOwner = await this.usersService.findByEmail(dto.email);
+      if (emailOwner && emailOwner.id !== employee.userId) {
+        throw new ConflictException(
+          'A user with this email already exists. Please use a different email.',
+        );
+      }
+    }
     Object.assign(employee, dto);
     const saved = await this.employeesRepository.save(employee);
     if (!hadEmail && saved.email && !saved.userId) {
