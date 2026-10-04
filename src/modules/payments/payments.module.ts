@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { Student } from '../students/entities/student.entity';
 import { Individual } from '../individuals/entities/individual.entity';
+import { Employee } from '../corporate/entities/employee.entity';
 import { Payment } from './entities/payment.entity';
 import { PaymentSettings } from './entities/payment-settings.entity';
 import { PaymentsService } from './payments.service';
@@ -11,7 +12,7 @@ import { PublicPaymentsController } from './public-payments.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, PaymentSettings, Student, Individual]),
+    TypeOrmModule.forFeature([Payment, PaymentSettings, Student, Individual, Employee]),
     CloudinaryModule,
   ],
   controllers: [PaymentsController, PublicPaymentsController],

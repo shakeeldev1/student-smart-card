@@ -14,6 +14,7 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { Student } from '../students/entities/student.entity';
 import { Individual } from '../individuals/entities/individual.entity';
+import { Employee } from '../corporate/entities/employee.entity';
 import { Payment } from './entities/payment.entity';
 import { PaymentSettings } from './entities/payment-settings.entity';
 import { PaymentMethod } from './enums/payment-method.enum';
@@ -38,6 +39,8 @@ export class PaymentsService {
     private readonly studentsRepository: Repository<Student>,
     @InjectRepository(Individual)
     private readonly individualsRepository: Repository<Individual>,
+    @InjectRepository(Employee)
+    private readonly employeesRepository: Repository<Employee>,
     private readonly cloudinary: CloudinaryService,
   ) {}
 
@@ -77,6 +80,10 @@ export class PaymentsService {
 
   getForIndividual(individualId: string): Promise<Payment | null> {
     return this.paymentsRepository.findOne({ where: { individualId } });
+  }
+
+  getForEmployee(employeeId: string): Promise<Payment | null> {
+    return this.paymentsRepository.findOne({ where: { employeeId } });
   }
 
   async getMineForIndividual(userId: string): Promise<Payment | null> {
@@ -125,6 +132,26 @@ export class PaymentsService {
     );
   }
 
+  async submitForEmployee(
+    actor: JwtPayload,
+    employeeId: string,
+    dto: SubmitPaymentDto,
+    file: Multer.File,
+  ): Promise<Payment> {
+    const employee = await this.employeesRepository.findOne({
+      where: { id: employeeId },
+      relations: { company: true },
+    });
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+    if (actor.role !== UserRole.ADMIN && employee.company?.ownerUserId !== actor.sub) {
+      throw new ForbiddenException('This employee does not belong to your company');
+    }
+    const amount = this.requireFee(employee.productVariant);
+    return this.upsert({ employeeId }, employee.productVariant as number, amount, dto, file);
+  }
+
   private requireFee(variant: number | null): number {
     const amount = registrationFeeForVariant(variant);
     if (amount === null) {
@@ -136,7 +163,7 @@ export class PaymentsService {
   }
 
   private async upsert(
-    key: { studentId?: string; individualId?: string },
+    key: { studentId?: string; individualId?: string; employeeId?: string },
     productVariant: number,
     amount: number,
     dto: SubmitPaymentDto,
@@ -161,7 +188,7 @@ export class PaymentsService {
    * overwritten.
    */
   private async upsertWithProof(
-    key: { studentId?: string; individualId?: string },
+    key: { studentId?: string; individualId?: string; employeeId?: string },
     productVariant: number,
     amount: number,
     proof: {
@@ -373,15 +400,129 @@ export class PaymentsService {
     return { count };
   }
 
-  // ---- Public (no-login) payment/tracking link for a school student ----
+  // ---- Company: outstanding fees + combined (batch) payment ----
 
-  async getPublicApplication(token: string): Promise<{
-    student: {
+  async getCompanyOutstanding(actor: JwtPayload): Promise<{
+    items: Array<{
       id: string;
       fullName: string;
-      className: string;
-      sectionName: string | null;
-      institutionName: string | null;
+      department: string | null;
+      designation: string | null;
+      productVariant: number | null;
+      fee: number | null;
+      paymentStatus: 'none' | 'pending' | 'confirmed' | 'rejected';
+      needsPayment: boolean;
+    }>;
+    totalOutstanding: number;
+    outstandingCount: number;
+  }> {
+    const employees = await this.employeesRepository.find({
+      where: { company: { ownerUserId: actor.sub } },
+      relations: { company: true },
+      order: { createdAt: 'DESC' },
+    });
+    const ids = employees.map((e) => e.id);
+    const payments = ids.length
+      ? await this.paymentsRepository.find({ where: { employeeId: In(ids) } })
+      : [];
+    const byEmployee = new Map(payments.map((p) => [p.employeeId as string, p]));
+
+    let totalOutstanding = 0;
+    let outstandingCount = 0;
+    const items = employees.map((e) => {
+      const payment = byEmployee.get(e.id);
+      const paymentStatus = payment ? payment.status : 'none';
+      const needsPayment =
+        paymentStatus === 'none' || paymentStatus === PaymentStatus.REJECTED;
+      const fee = registrationFeeForVariant(e.productVariant);
+      if (needsPayment && fee) {
+        totalOutstanding += fee;
+        outstandingCount += 1;
+      }
+      return {
+        id: e.id,
+        fullName: e.fullName,
+        department: e.department,
+        designation: e.designation,
+        productVariant: e.productVariant,
+        fee,
+        paymentStatus: paymentStatus as 'none' | 'pending' | 'confirmed' | 'rejected',
+        needsPayment,
+      };
+    });
+
+    return { items, totalOutstanding, outstandingCount };
+  }
+
+  async submitBatchForEmployees(
+    actor: JwtPayload,
+    employeeIds: string[],
+    reference: string | undefined,
+    file: Multer.File,
+  ): Promise<{ batchId: string; count: number; totalAmount: number }> {
+    const unique = [...new Set(employeeIds)].filter(Boolean);
+    if (unique.length === 0) {
+      throw new BadRequestException('Select at least one employee to pay for.');
+    }
+
+    const employees = await this.employeesRepository.find({
+      where: { id: In(unique) },
+      relations: { company: true },
+    });
+    if (employees.length !== unique.length) {
+      throw new NotFoundException('One or more selected employees were not found.');
+    }
+    for (const employee of employees) {
+      if (actor.role !== UserRole.ADMIN && employee.company?.ownerUserId !== actor.sub) {
+        throw new ForbiddenException('One or more employees do not belong to your company.');
+      }
+    }
+
+    const fees = employees.map((e) => ({ employee: e, amount: this.requireFee(e.productVariant) }));
+    const existing = await this.paymentsRepository.find({ where: { employeeId: In(unique) } });
+    const confirmed = new Set(
+      existing.filter((p) => p.status === PaymentStatus.CONFIRMED).map((p) => p.employeeId),
+    );
+    const payable = fees.filter((f) => !confirmed.has(f.employee.id));
+    if (payable.length === 0) {
+      throw new BadRequestException('All selected employees are already paid and confirmed.');
+    }
+
+    const uploaded = await this.cloudinary.uploadBuffer(
+      file.buffer,
+      'payment-proofs',
+      file.originalname,
+    );
+    const batchId = randomUUID();
+
+    let totalAmount = 0;
+    for (const { employee, amount } of payable) {
+      await this.upsertWithProof(
+        { employeeId: employee.id },
+        employee.productVariant as number,
+        amount,
+        {
+          proofImageUrl: uploaded.url,
+          proofImagePublicId: uploaded.publicId,
+          reference: reference ?? null,
+          batchId,
+        },
+      );
+      totalAmount += amount;
+    }
+
+    return { batchId, count: payable.length, totalAmount };
+  }
+
+  // ---- Public (no-login) payment/tracking link for a school student or employee ----
+
+  async getPublicApplication(token: string): Promise<{
+    kind: 'student' | 'employee';
+    applicant: {
+      id: string;
+      fullName: string;
+      group: string | null; // class/section for students, department for employees
+      orgName: string | null; // school or company name
       productVariant: number | null;
       status: string;
       certificateIssued: boolean;
@@ -391,35 +532,63 @@ export class PaymentsService {
     settings: PaymentSettings;
     fee: number | null;
   }> {
+    const settings = await this.getSettings();
+
     const student = await this.studentsRepository.findOne({
       where: { publicToken: token },
       relations: { institution: true, section: true, card: true },
     });
-    if (!student) {
-      throw new NotFoundException('This link is invalid or has expired.');
+    if (student) {
+      const payment = await this.getForStudent(student.id);
+      const group = [student.className, student.section?.name].filter(Boolean).join(' · ') || null;
+      return {
+        kind: 'student',
+        applicant: {
+          id: student.id,
+          fullName: student.fullName,
+          group,
+          orgName: student.institution?.name ?? student.institutionNameFreeText ?? null,
+          productVariant: student.productVariant,
+          status: student.status,
+          certificateIssued: student.certificateIssued,
+          card: student.card
+            ? { cardNumber: student.card.cardNumber, status: student.card.status }
+            : null,
+        },
+        payment,
+        settings,
+        fee: registrationFeeForVariant(student.productVariant),
+      };
     }
-    const [payment, settings] = await Promise.all([
-      this.getForStudent(student.id),
-      this.getSettings(),
-    ]);
-    return {
-      student: {
-        id: student.id,
-        fullName: student.fullName,
-        className: student.className,
-        sectionName: student.section?.name ?? null,
-        institutionName: student.institution?.name ?? student.institutionNameFreeText ?? null,
-        productVariant: student.productVariant,
-        status: student.status,
-        certificateIssued: student.certificateIssued,
-        card: student.card
-          ? { cardNumber: student.card.cardNumber, status: student.card.status }
-          : null,
-      },
-      payment,
-      settings,
-      fee: registrationFeeForVariant(student.productVariant),
-    };
+
+    const employee = await this.employeesRepository.findOne({
+      where: { publicToken: token },
+      relations: { company: true, card: true },
+    });
+    if (employee) {
+      const payment = await this.getForEmployee(employee.id);
+      const group = [employee.designation, employee.department].filter(Boolean).join(' · ') || null;
+      return {
+        kind: 'employee',
+        applicant: {
+          id: employee.id,
+          fullName: employee.fullName,
+          group,
+          orgName: employee.company?.name ?? null,
+          productVariant: employee.productVariant,
+          status: employee.status,
+          certificateIssued: employee.certificateIssued,
+          card: employee.card
+            ? { cardNumber: employee.card.cardNumber, status: employee.card.status }
+            : null,
+        },
+        payment,
+        settings,
+        fee: registrationFeeForVariant(employee.productVariant),
+      };
+    }
+
+    throw new NotFoundException('This link is invalid or has expired.');
   }
 
   async submitByPublicToken(
@@ -428,11 +597,16 @@ export class PaymentsService {
     file: Multer.File,
   ): Promise<Payment> {
     const student = await this.studentsRepository.findOne({ where: { publicToken: token } });
-    if (!student) {
-      throw new NotFoundException('This link is invalid or has expired.');
+    if (student) {
+      const amount = this.requireFee(student.productVariant);
+      return this.upsert({ studentId: student.id }, student.productVariant as number, amount, dto, file);
     }
-    const amount = this.requireFee(student.productVariant);
-    return this.upsert({ studentId: student.id }, student.productVariant as number, amount, dto, file);
+    const employee = await this.employeesRepository.findOne({ where: { publicToken: token } });
+    if (employee) {
+      const amount = this.requireFee(employee.productVariant);
+      return this.upsert({ employeeId: employee.id }, employee.productVariant as number, amount, dto, file);
+    }
+    throw new NotFoundException('This link is invalid or has expired.');
   }
 
   // ---- Admin verification ----
@@ -448,7 +622,7 @@ export class PaymentsService {
     const where = filters.status ? { status: filters.status } : {};
     const [items, total] = await this.paymentsRepository.findAndCount({
       where,
-      relations: { student: true, individual: true },
+      relations: { student: true, individual: true, employee: true },
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
@@ -459,7 +633,7 @@ export class PaymentsService {
   private async findByIdOrThrow(id: string): Promise<Payment> {
     const payment = await this.paymentsRepository.findOne({
       where: { id },
-      relations: { student: true, individual: true },
+      relations: { student: true, individual: true, employee: true },
     });
     if (!payment) {
       throw new NotFoundException('Payment not found');
@@ -500,6 +674,11 @@ export class PaymentsService {
 
   async isConfirmedForIndividual(individualId: string): Promise<boolean> {
     const payment = await this.getForIndividual(individualId);
+    return payment?.status === PaymentStatus.CONFIRMED;
+  }
+
+  async isConfirmedForEmployee(employeeId: string): Promise<boolean> {
+    const payment = await this.getForEmployee(employeeId);
     return payment?.status === PaymentStatus.CONFIRMED;
   }
 }

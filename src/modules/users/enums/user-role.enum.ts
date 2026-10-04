@@ -13,6 +13,16 @@ export enum UserRole {
   ADMIN = 'admin',
   INDIVIDUAL = 'individual',
   /**
+   * A company account (corporate). Self-registers, is approved by an operator
+   * (like a school), then enrolls its employees — mirroring the school flow.
+   */
+  CORPORATE = 'corporate',
+  /**
+   * An employee enrolled by their company. Gets a login at approval and the
+   * same Takaful card/certificate as a student.
+   */
+  EMPLOYEE = 'employee',
+  /**
    * Geographic oversight accounts, provisioned by an admin and scoped to a
    * single province / region / district / tehsil. They see aggregate, area-
    * limited analytics (schools + counts) only — never student personal data.

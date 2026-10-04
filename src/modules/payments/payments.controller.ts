@@ -144,6 +144,49 @@ export class PaymentsController {
     return this.paymentsService.submitForIndividual(userId, dto, assertImage(file));
   }
 
+  // ---- Company: pay for an employee ----
+
+  // Static routes must precede the ':employeeId' param route below.
+  @Get('employees/outstanding')
+  @Roles(UserRole.CORPORATE)
+  getCompanyOutstanding(@CurrentUser() user: JwtPayload) {
+    return this.paymentsService.getCompanyOutstanding(user);
+  }
+
+  @Post('employees/batch')
+  @Roles(UserRole.CORPORATE, UserRole.ADMIN)
+  @proofUpload('proof')
+  submitEmployeeBatch(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: SubmitBatchPaymentDto,
+    @UploadedFile() file?: Multer.File,
+  ) {
+    return this.paymentsService.submitBatchForEmployees(
+      user,
+      dto.studentIds,
+      dto.reference,
+      assertImage(file),
+    );
+  }
+
+  @Get('employees/:employeeId')
+  @Roles(UserRole.CORPORATE, UserRole.ADMIN)
+  getForEmployee(@Param('employeeId') employeeId: string) {
+    return this.paymentsService.getForEmployee(employeeId);
+  }
+
+  @Post('employees/:employeeId')
+  @Roles(UserRole.CORPORATE, UserRole.ADMIN)
+  @proofUpload('proof')
+  submitForEmployee(
+    @CurrentUser() user: JwtPayload,
+    @Param('employeeId') employeeId: string,
+    @Body() dto: SubmitPaymentDto,
+    @UploadedFile() file?: Multer.File,
+  ) {
+    return this.paymentsService.submitForEmployee(user, employeeId, dto, assertImage(file));
+  }
+
   // ---- Admin: verification queue ----
 
   @Get('admin')

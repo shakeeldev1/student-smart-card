@@ -24,6 +24,8 @@ import {
 } from '../email/interfaces/email-provider.interface';
 import { RegisterIndividualDto } from './dto/register-individual.dto';
 import { RegisterSchoolDto } from './dto/register-school.dto';
+import { RegisterCompanyDto } from '../corporate/dto/register-company.dto';
+import { SetupEmployeeAccountDto } from './dto/setup-employee-account.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
 import { LoginDto } from './dto/login.dto';
@@ -34,6 +36,8 @@ import { SetupStudentAccountDto } from './dto/setup-student-account.dto';
 import { SetupAreaManagerDto } from '../area/dto/setup-area-manager.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { Student } from '../students/entities/student.entity';
+import { Employee } from '../corporate/entities/employee.entity';
+import { CompaniesService } from '../corporate/companies.service';
 import { AreaManager } from '../area/entities/area-manager.entity';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { CardsService } from '../cards/cards.service';
@@ -45,6 +49,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly institutionsService: InstitutionsService,
+    private readonly companiesService: CompaniesService,
     private readonly otpService: OtpService,
     private readonly tokenService: TokenService,
     @Inject(EMAIL_SERVICE) private readonly emailService: EmailProvider,
@@ -52,6 +57,8 @@ export class AuthService {
     private readonly config: ConfigService,
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
+    @InjectRepository(Employee)
+    private readonly employeesRepository: Repository<Employee>,
     @InjectRepository(AreaManager)
     private readonly areaManagersRepository: Repository<AreaManager>,
     private readonly cloudinaryService: CloudinaryService,
@@ -151,6 +158,60 @@ export class AuthService {
     return {
       userId: user.id,
       institutionId: institution.id,
+      email: user.email,
+      message: 'Verification code sent',
+    };
+  }
+
+  async registerCorporate(dto: RegisterCompanyDto) {
+    const existingUser = await this.usersService.findByEmail(dto.email);
+    if (existingUser) {
+      throw new ConflictException('Email already registered');
+    }
+
+    const existingCompany = await this.companiesService.findByRegistrationNumber(
+      dto.company.registrationNumber,
+    );
+    if (existingCompany) {
+      throw new ConflictException(
+        'Company registration number already registered',
+      );
+    }
+
+    const passwordHash = await this.hashPassword(dto.password);
+
+    const { user, company } = await this.dataSource.transaction(
+      async (manager) => {
+        const user = await this.usersService.createWithManager(manager, {
+          email: dto.email,
+          passwordHash,
+          name: dto.name,
+          role: UserRole.CORPORATE,
+          phone: dto.phone ?? null,
+        });
+
+        const company = await this.companiesService.createWithManager(manager, {
+          ownerUserId: user.id,
+          ...dto.company,
+        });
+
+        return { user, company };
+      },
+    );
+
+    const code = await this.otpService.generate(
+      user.id,
+      OtpPurpose.EMAIL_VERIFICATION,
+    );
+    await this.emailService.sendOtpEmail(
+      user.email,
+      code,
+      OtpPurpose.EMAIL_VERIFICATION,
+    );
+
+    return {
+      userId: user.id,
+      companyId: company.id,
       email: user.email,
       message: 'Verification code sent',
     };
@@ -296,6 +357,20 @@ export class AuthService {
       };
     }
 
+    if (user.role === UserRole.CORPORATE) {
+      const company = await this.companiesService.findByOwnerUserId(user.id);
+      return {
+        ...base,
+        company: company
+          ? {
+              id: company.id,
+              name: company.name,
+              approvalStatus: company.approvalStatus,
+            }
+          : null,
+      };
+    }
+
     // Area managers carry their tier + area so the UI can show a meaningful
     // title ("Province Manager", "District Manager", …) instead of the raw role.
     if (user.role === UserRole.AREA_MANAGER) {
@@ -400,6 +475,63 @@ export class AuthService {
     }
 
     // Generate tokens
+    const tokens = await this.tokenService.issueTokenPair(user);
+
+    return {
+      message: 'Account setup successful',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
+  }
+
+  async setupEmployeeAccount(dto: SetupEmployeeAccountDto) {
+    const employee = await this.employeesRepository.findOne({
+      where: { setupToken: dto.token },
+    });
+
+    if (!employee) {
+      throw new BadRequestException('Invalid or expired setup token');
+    }
+    if (!employee.setupTokenExpiresAt || employee.setupTokenExpiresAt < new Date()) {
+      throw new BadRequestException('Setup token has expired');
+    }
+    if (employee.userId) {
+      throw new BadRequestException('Account already set up');
+    }
+    if (!employee.email) {
+      throw new BadRequestException(
+        'This employee record has no email on file. Contact support to add one before setting up an account.',
+      );
+    }
+
+    const existingUser = await this.usersService.findByEmail(employee.email);
+    if (existingUser) {
+      throw new ConflictException(
+        'An account with this email already exists. Please log in instead, or contact support if you believe this is an error.',
+      );
+    }
+
+    const passwordHash = await this.hashPassword(dto.password);
+    const userEntity = this.usersService.create({
+      email: employee.email,
+      passwordHash,
+      name: employee.fullName,
+      role: UserRole.EMPLOYEE,
+      emailVerified: true,
+    });
+    const user = await this.usersService.save(userEntity);
+
+    employee.userId = user.id;
+    employee.setupToken = null;
+    employee.setupTokenExpiresAt = null;
+    await this.employeesRepository.save(employee);
+
     const tokens = await this.tokenService.issueTokenPair(user);
 
     return {

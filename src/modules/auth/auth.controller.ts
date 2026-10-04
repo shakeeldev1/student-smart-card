@@ -26,6 +26,8 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { AuthService } from './auth.service';
 import { RegisterIndividualDto } from './dto/register-individual.dto';
 import { RegisterSchoolDto } from './dto/register-school.dto';
+import { RegisterCompanyDto } from '../corporate/dto/register-company.dto';
+import { SetupEmployeeAccountDto } from './dto/setup-employee-account.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
 import { LoginDto } from './dto/login.dto';
@@ -60,6 +62,12 @@ export class AuthController {
   @Throttle(AUTH_THROTTLE)
   registerIndividual(@Body() dto: RegisterIndividualDto) {
     return this.authService.registerIndividual(dto);
+  }
+
+  @Post('register/corporate')
+  @Throttle(AUTH_THROTTLE)
+  registerCorporate(@Body() dto: RegisterCompanyDto) {
+    return this.authService.registerCorporate(dto);
   }
 
   @Post('verify-email')
@@ -114,6 +122,13 @@ export class AuthController {
   @Throttle(AUTH_THROTTLE)
   setupStudentAccount(@Body() dto: SetupStudentAccountDto) {
     return this.authService.setupStudentAccount(dto);
+  }
+
+  @Post('setup-employee')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(AUTH_THROTTLE)
+  setupEmployeeAccount(@Body() dto: SetupEmployeeAccountDto) {
+    return this.authService.setupEmployeeAccount(dto);
   }
 
   @Post('setup-area-manager')

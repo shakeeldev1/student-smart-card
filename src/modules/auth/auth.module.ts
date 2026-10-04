@@ -5,9 +5,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmailOtp } from './entities/email-otp.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { Student } from '../students/entities/student.entity';
+import { Employee } from '../corporate/entities/employee.entity';
 import { AreaManager } from '../area/entities/area-manager.entity';
 import { UsersModule } from '../users/users.module';
 import { InstitutionsModule } from '../institutions/institutions.module';
+import { CorporateModule } from '../corporate/corporate.module';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { CardsModule } from '../cards/cards.module';
 import { OtpService } from './otp.service';
@@ -18,9 +20,10 @@ import { AuthController } from './auth.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([EmailOtp, RefreshToken, Student, AreaManager]),
+    TypeOrmModule.forFeature([EmailOtp, RefreshToken, Student, Employee, AreaManager]),
     UsersModule,
     InstitutionsModule,
+    CorporateModule,
     CloudinaryModule,
     CardsModule,
     PassportModule,

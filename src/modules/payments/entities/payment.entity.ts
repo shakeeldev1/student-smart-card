@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Student } from '../../students/entities/student.entity';
 import { Individual } from '../../individuals/entities/individual.entity';
+import { Employee } from '../../corporate/entities/employee.entity';
 import { PaymentMethod } from '../enums/payment-method.enum';
 import { PaymentStatus } from '../enums/payment-status.enum';
 
@@ -39,6 +40,14 @@ export class Payment {
   @ManyToOne(() => Individual, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'individualId' })
   individual?: Individual | null;
+
+  @Index()
+  @Column({ type: 'uuid', nullable: true })
+  employeeId: string | null;
+
+  @ManyToOne(() => Employee, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'employeeId' })
+  employee?: Employee | null;
 
   /** Fee in PKR = productVariant × 1,000, snapshotted at submission. */
   @Column({ type: 'int' })

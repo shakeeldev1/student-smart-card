@@ -11,6 +11,7 @@ import { randomInt } from 'crypto';
 import { Inject } from '@nestjs/common';
 import { Card } from './entities/card.entity';
 import { IndividualCard } from '../individuals/entities/individual-card.entity';
+import { EmployeeCard } from '../corporate/entities/employee-card.entity';
 import { Student } from '../students/entities/student.entity';
 import { CardStatus } from './enums/card-status.enum';
 import {
@@ -47,6 +48,8 @@ export class CardsService {
     private readonly cardsRepository: Repository<Card>,
     @InjectRepository(IndividualCard)
     private readonly individualCardsRepository: Repository<IndividualCard>,
+    @InjectRepository(EmployeeCard)
+    private readonly employeeCardsRepository: Repository<EmployeeCard>,
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
     @Inject(EMAIL_SERVICE)
@@ -77,11 +80,12 @@ export class CardsService {
     for (let attempt = 0; attempt < 25; attempt += 1) {
       const random8 = String(randomInt(0, 100_000_000)).padStart(8, '0');
       const cardNumber = `${prefix}${random8}`;
-      const [asStudent, asIndividual] = await Promise.all([
+      const [asStudent, asIndividual, asEmployee] = await Promise.all([
         this.cardsRepository.findOne({ where: { cardNumber } }),
         this.individualCardsRepository.findOne({ where: { cardNumber } }),
+        this.employeeCardsRepository.findOne({ where: { cardNumber } }),
       ]);
-      if (!asStudent && !asIndividual) {
+      if (!asStudent && !asIndividual && !asEmployee) {
         return cardNumber;
       }
     }
@@ -185,6 +189,7 @@ export class CardsService {
   private async findAnyCardByNumber(cardNumber: string): Promise<
     | { kind: 'student'; card: Card }
     | { kind: 'individual'; card: IndividualCard }
+    | { kind: 'employee'; card: EmployeeCard }
     | null
   > {
     const normalized = cardNumber?.trim().toUpperCase();
@@ -208,18 +213,29 @@ export class CardsService {
       return { kind: 'individual', card: individualCard };
     }
 
+    const employeeCard = await this.employeeCardsRepository.findOne({
+      where: { cardNumber: normalized },
+      relations: { employee: { user: true, company: true } },
+    });
+    if (employeeCard) {
+      return { kind: 'employee', card: employeeCard };
+    }
+
     return null;
   }
 
   private async saveMatch(
     match:
       | { kind: 'student'; card: Card }
-      | { kind: 'individual'; card: IndividualCard },
+      | { kind: 'individual'; card: IndividualCard }
+      | { kind: 'employee'; card: EmployeeCard },
   ): Promise<void> {
     if (match.kind === 'student') {
       await this.cardsRepository.save(match.card);
-    } else {
+    } else if (match.kind === 'individual') {
       await this.individualCardsRepository.save(match.card);
+    } else {
+      await this.employeeCardsRepository.save(match.card);
     }
   }
 
@@ -235,13 +251,17 @@ export class CardsService {
     const holderEmail =
       match.kind === 'student'
         ? match.card.student?.email
-        : // Individuals register themselves, so their login email is a
-          // reliable fallback when the application's email field is blank.
-          (match.card.individual?.email ?? match.card.individual?.user?.email);
+        : match.kind === 'individual'
+          ? // Individuals register themselves, so their login email is a
+            // reliable fallback when the application's email field is blank.
+            (match.card.individual?.email ?? match.card.individual?.user?.email)
+          : (match.card.employee?.email ?? match.card.employee?.user?.email);
     const holderName =
       match.kind === 'student'
         ? match.card.student?.fullName
-        : match.card.individual?.fullName;
+        : match.kind === 'individual'
+          ? match.card.individual?.fullName
+          : match.card.employee?.fullName;
 
     if (!holderEmail) {
       throw new BadRequestException(
@@ -293,6 +313,17 @@ export class CardsService {
         status: match.card.status,
         holderName: match.card.student?.fullName ?? '',
         className: match.card.student?.className ?? null,
+        issuedAt: match.card.issuedAt,
+        expiresAt: match.card.expiresAt,
+      };
+    }
+
+    if (match.kind === 'employee') {
+      return {
+        cardNumber: match.card.cardNumber,
+        status: match.card.status,
+        holderName: match.card.employee?.fullName ?? '',
+        className: match.card.employee?.company?.name ?? null,
         issuedAt: match.card.issuedAt,
         expiresAt: match.card.expiresAt,
       };
