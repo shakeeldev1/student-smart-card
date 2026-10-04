@@ -197,18 +197,16 @@ export class StudentsService {
     id: string,
   ): Promise<{ message: string }> {
     const student = await this.findOneForUser(currentUser, id);
-    if (student.userId) {
-      throw new BadRequestException(
-        'This student has already set up their account',
-      );
-    }
     if (!student.email) {
       throw new BadRequestException(
-        'Add an email address for this student before sending the setup link',
+        'Add an email address for this student before sending the link',
       );
     }
     await this.sendSetupEmail(student);
-    return { message: `Setup link sent to ${student.email}` };
+    // When the account already exists, the same link lets them set a new
+    // password (password reset); otherwise it is the first-time setup link.
+    const action = student.userId ? 'Password reset link' : 'Setup link';
+    return { message: `${action} sent to ${student.email}` };
   }
 
   private async sendSetupEmail(student: Student): Promise<void> {

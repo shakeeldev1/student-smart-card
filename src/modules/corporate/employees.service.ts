@@ -147,14 +147,13 @@ export class EmployeesService {
     id: string,
   ): Promise<{ message: string }> {
     const employee = await this.findOneForUser(currentUser, id);
-    if (employee.userId) {
-      throw new BadRequestException('This employee has already set up their account');
-    }
     if (!employee.email) {
-      throw new BadRequestException('Add an email address before sending the setup link');
+      throw new BadRequestException('Add an email address before sending the link');
     }
     await this.sendSetupEmail(employee);
-    return { message: `Setup link sent to ${employee.email}` };
+    // Existing account → the same link acts as a password reset.
+    const action = employee.userId ? 'Password reset link' : 'Setup link';
+    return { message: `${action} sent to ${employee.email}` };
   }
 
   private async sendSetupEmail(employee: Employee): Promise<void> {

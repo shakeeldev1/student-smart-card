@@ -434,14 +434,37 @@ export class AuthService {
       throw new BadRequestException('Setup token has expired');
     }
 
-    if (student.userId) {
-      throw new BadRequestException('Account already set up');
-    }
-
     if (!student.email) {
       throw new BadRequestException(
         'This student record has no email on file. Contact support to add one before setting up an account.',
       );
+    }
+
+    const passwordHash = await this.hashPassword(dto.password);
+
+    // Existing account → the link acts as a password reset.
+    if (student.userId) {
+      const existing = await this.usersService.findById(student.userId);
+      if (!existing) {
+        throw new BadRequestException('Account not found for this link');
+      }
+      await this.usersService.updatePassword(existing.id, passwordHash);
+      await this.tokenService.revokeAllForUser(existing.id);
+      student.setupToken = null;
+      student.setupTokenExpiresAt = null;
+      await this.studentsRepository.save(student);
+      const resetTokens = await this.tokenService.issueTokenPair(existing);
+      return {
+        message: 'Password updated successfully',
+        user: {
+          id: existing.id,
+          email: existing.email,
+          name: existing.name,
+          role: existing.role,
+        },
+        accessToken: resetTokens.accessToken,
+        refreshToken: resetTokens.refreshToken,
+      };
     }
 
     const existingUser = await this.usersService.findByEmail(student.email);
@@ -452,7 +475,6 @@ export class AuthService {
     }
 
     // Create user account for student
-    const passwordHash = await this.hashPassword(dto.password);
     const userEntity = this.usersService.create({
       email: student.email,
       passwordHash,
@@ -501,13 +523,37 @@ export class AuthService {
     if (!employee.setupTokenExpiresAt || employee.setupTokenExpiresAt < new Date()) {
       throw new BadRequestException('Setup token has expired');
     }
-    if (employee.userId) {
-      throw new BadRequestException('Account already set up');
-    }
     if (!employee.email) {
       throw new BadRequestException(
         'This employee record has no email on file. Contact support to add one before setting up an account.',
       );
+    }
+
+    const passwordHash = await this.hashPassword(dto.password);
+
+    // Existing account → the link acts as a password reset.
+    if (employee.userId) {
+      const existing = await this.usersService.findById(employee.userId);
+      if (!existing) {
+        throw new BadRequestException('Account not found for this link');
+      }
+      await this.usersService.updatePassword(existing.id, passwordHash);
+      await this.tokenService.revokeAllForUser(existing.id);
+      employee.setupToken = null;
+      employee.setupTokenExpiresAt = null;
+      await this.employeesRepository.save(employee);
+      const resetTokens = await this.tokenService.issueTokenPair(existing);
+      return {
+        message: 'Password updated successfully',
+        user: {
+          id: existing.id,
+          email: existing.email,
+          name: existing.name,
+          role: existing.role,
+        },
+        accessToken: resetTokens.accessToken,
+        refreshToken: resetTokens.refreshToken,
+      };
     }
 
     const existingUser = await this.usersService.findByEmail(employee.email);
@@ -517,7 +563,6 @@ export class AuthService {
       );
     }
 
-    const passwordHash = await this.hashPassword(dto.password);
     const userEntity = this.usersService.create({
       email: employee.email,
       passwordHash,
