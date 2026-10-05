@@ -31,6 +31,7 @@ import {
   provinceCode,
   districtCode,
 } from '../../common/geo/pakistan-geo-codes';
+import { isGoldenSuffix } from './golden-number.util';
 
 export interface CardLookupResult {
   cardNumber: string;
@@ -79,6 +80,8 @@ export class CardsService {
     const prefix = `${SSCP_PREFIX}${provinceCode(province)}${districtCode(province, district)}`;
     for (let attempt = 0; attempt < 25; attempt += 1) {
       const random8 = String(randomInt(0, 100_000_000)).padStart(8, '0');
+      // Golden suffixes are reserved for admin-assigned VIP cards — never auto-issue one.
+      if (isGoldenSuffix(random8)) continue;
       const cardNumber = `${prefix}${random8}`;
       const [asStudent, asIndividual, asEmployee] = await Promise.all([
         this.cardsRepository.findOne({ where: { cardNumber } }),
