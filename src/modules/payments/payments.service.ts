@@ -86,6 +86,55 @@ export class PaymentsService {
     return this.paymentsRepository.findOne({ where: { employeeId } });
   }
 
+  /**
+   * Ownership-checked read for the SCHOOL/ADMIN payment GET endpoint. A school
+   * may only read a payment for a student at its own institution; admins may
+   * read any. Mirrors the check in submitForStudent to prevent IDOR.
+   */
+  async getForStudentAsActor(
+    actor: JwtPayload,
+    studentId: string,
+  ): Promise<Payment | null> {
+    const student = await this.studentsRepository.findOne({
+      where: { id: studentId },
+      relations: { institution: true },
+    });
+    if (!student) {
+      throw new NotFoundException('Student not found');
+    }
+    if (
+      actor.role !== UserRole.ADMIN &&
+      student.institution?.ownerUserId !== actor.sub
+    ) {
+      throw new ForbiddenException('This student does not belong to your school');
+    }
+    return this.getForStudent(studentId);
+  }
+
+  /**
+   * Ownership-checked read for the CORPORATE/ADMIN payment GET endpoint. A
+   * company may only read a payment for its own employee; admins may read any.
+   */
+  async getForEmployeeAsActor(
+    actor: JwtPayload,
+    employeeId: string,
+  ): Promise<Payment | null> {
+    const employee = await this.employeesRepository.findOne({
+      where: { id: employeeId },
+      relations: { company: true },
+    });
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+    if (
+      actor.role !== UserRole.ADMIN &&
+      employee.company?.ownerUserId !== actor.sub
+    ) {
+      throw new ForbiddenException('This employee does not belong to your company');
+    }
+    return this.getForEmployee(employeeId);
+  }
+
   async getMineForIndividual(userId: string): Promise<Payment | null> {
     const individual = await this.individualsRepository.findOne({ where: { userId } });
     return individual ? this.getForIndividual(individual.id) : null;
@@ -370,15 +419,19 @@ export class PaymentsService {
       throw new NotFoundException('Payment batch not found');
     }
     let count = 0;
-    for (const payment of rows) {
-      if (payment.status !== PaymentStatus.PENDING) continue;
-      payment.status = PaymentStatus.CONFIRMED;
-      payment.reviewedByUserId = adminId;
-      payment.reviewedAt = new Date();
-      payment.rejectionReason = null;
-      await this.paymentsRepository.save(payment);
-      count += 1;
-    }
+    // Atomic: a mid-loop failure must not leave a batch half-confirmed.
+    await this.paymentsRepository.manager.transaction(async (manager) => {
+      count = 0;
+      for (const payment of rows) {
+        if (payment.status !== PaymentStatus.PENDING) continue;
+        payment.status = PaymentStatus.CONFIRMED;
+        payment.reviewedByUserId = adminId;
+        payment.reviewedAt = new Date();
+        payment.rejectionReason = null;
+        await manager.save(payment);
+        count += 1;
+      }
+    });
     return { count };
   }
 
@@ -388,15 +441,19 @@ export class PaymentsService {
       throw new NotFoundException('Payment batch not found');
     }
     let count = 0;
-    for (const payment of rows) {
-      if (payment.status !== PaymentStatus.PENDING) continue;
-      payment.status = PaymentStatus.REJECTED;
-      payment.reviewedByUserId = adminId;
-      payment.reviewedAt = new Date();
-      payment.rejectionReason = reason ?? null;
-      await this.paymentsRepository.save(payment);
-      count += 1;
-    }
+    // Atomic: a mid-loop failure must not leave a batch half-rejected.
+    await this.paymentsRepository.manager.transaction(async (manager) => {
+      count = 0;
+      for (const payment of rows) {
+        if (payment.status !== PaymentStatus.PENDING) continue;
+        payment.status = PaymentStatus.REJECTED;
+        payment.reviewedByUserId = adminId;
+        payment.reviewedAt = new Date();
+        payment.rejectionReason = reason ?? null;
+        await manager.save(payment);
+        count += 1;
+      }
+    });
     return { count };
   }
 

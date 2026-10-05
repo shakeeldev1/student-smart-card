@@ -9,6 +9,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { memoryStorage } from 'multer';
 import type { Multer } from 'multer';
 import { PaymentsService } from './payments.service';
@@ -42,6 +43,7 @@ export class PublicPaymentsController {
   }
 
   @Post(':token/payment')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @UseInterceptors(
     FileInterceptor('proof', {
       storage: memoryStorage(),

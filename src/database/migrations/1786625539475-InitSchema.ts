@@ -4,6 +4,10 @@ export class InitSchema1786625539475 implements MigrationInterface {
   name = 'InitSchema1786625539475';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // Required for uuid_generate_v4() column defaults used throughout the schema.
+    // A fresh Postgres database (e.g. a new AWS RDS instance) does not enable
+    // this extension by default, so the first CREATE TABLE would otherwise fail.
+    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
     await queryRunner.query(
       `CREATE TYPE "public"."users_role_enum" AS ENUM('parent', 'school', 'operator')`,
     );

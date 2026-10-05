@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -85,7 +78,13 @@ export class CardsController {
     };
   }
 
+  // Public, un-coded status check (used by the Track Card page and partners to
+  // confirm a card is valid/active for a discount). It deliberately does NOT
+  // return holder PII (name/class) — that is only released after the emailed
+  // verification code via POST /cards/verify, or to the API-key partner. It is
+  // throttled to prevent card-number enumeration.
   @Get('verify/:cardNumber')
+  @Throttle(CARD_CODE_THROTTLE)
   async verifyByNumber(@Param('cardNumber') cardNumber: string) {
     const card = await this.cardsService.lookupByCardNumber(cardNumber);
     if (!card) {
@@ -97,8 +96,6 @@ export class CardsController {
       cardNumber: card.cardNumber,
       status: card.status,
       eligibleForDiscount: card.status === CardStatus.ACTIVE,
-      studentName: card.holderName,
-      className: card.className,
       issuedAt: card.issuedAt,
       expiresAt: card.expiresAt,
     };

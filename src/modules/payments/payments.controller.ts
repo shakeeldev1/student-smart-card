@@ -70,16 +70,26 @@ export class PaymentsController {
 
   @Put('settings')
   @Roles(UserRole.ADMIN)
-  updateSettings(@CurrentUser() user: JwtPayload, @Body() dto: UpdatePaymentSettingsDto) {
+  updateSettings(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdatePaymentSettingsDto,
+  ) {
     return this.paymentsService.updateSettings(dto, user.sub);
   }
 
   @Post('settings/qr')
   @Roles(UserRole.ADMIN)
   @proofUpload('qr')
-  updateQr(@CurrentUser() user: JwtPayload, @UploadedFile() file?: Multer.File) {
+  updateQr(
+    @CurrentUser() user: JwtPayload,
+    @UploadedFile() file?: Multer.File,
+  ) {
     const image = assertImage(file);
-    return this.paymentsService.updateQr(image.buffer, image.originalname, user.sub);
+    return this.paymentsService.updateQr(
+      image.buffer,
+      image.originalname,
+      user.sub,
+    );
   }
 
   // ---- School: pay for a student ----
@@ -109,8 +119,11 @@ export class PaymentsController {
 
   @Get('students/:studentId')
   @Roles(UserRole.SCHOOL, UserRole.ADMIN)
-  getForStudent(@Param('studentId') studentId: string) {
-    return this.paymentsService.getForStudent(studentId);
+  getForStudent(
+    @CurrentUser() user: JwtPayload,
+    @Param('studentId') studentId: string,
+  ) {
+    return this.paymentsService.getForStudentAsActor(user, studentId);
   }
 
   @Post('students/:studentId')
@@ -122,7 +135,12 @@ export class PaymentsController {
     @Body() dto: SubmitPaymentDto,
     @UploadedFile() file?: Multer.File,
   ) {
-    return this.paymentsService.submitForStudent(user, studentId, dto, assertImage(file));
+    return this.paymentsService.submitForStudent(
+      user,
+      studentId,
+      dto,
+      assertImage(file),
+    );
   }
 
   // ---- Individual: pay for yourself ----
@@ -141,7 +159,11 @@ export class PaymentsController {
     @Body() dto: SubmitPaymentDto,
     @UploadedFile() file?: Multer.File,
   ) {
-    return this.paymentsService.submitForIndividual(userId, dto, assertImage(file));
+    return this.paymentsService.submitForIndividual(
+      userId,
+      dto,
+      assertImage(file),
+    );
   }
 
   // ---- Company: pay for an employee ----
@@ -171,8 +193,11 @@ export class PaymentsController {
 
   @Get('employees/:employeeId')
   @Roles(UserRole.CORPORATE, UserRole.ADMIN)
-  getForEmployee(@Param('employeeId') employeeId: string) {
-    return this.paymentsService.getForEmployee(employeeId);
+  getForEmployee(
+    @CurrentUser() user: JwtPayload,
+    @Param('employeeId') employeeId: string,
+  ) {
+    return this.paymentsService.getForEmployeeAsActor(user, employeeId);
   }
 
   @Post('employees/:employeeId')
@@ -184,7 +209,12 @@ export class PaymentsController {
     @Body() dto: SubmitPaymentDto,
     @UploadedFile() file?: Multer.File,
   ) {
-    return this.paymentsService.submitForEmployee(user, employeeId, dto, assertImage(file));
+    return this.paymentsService.submitForEmployee(
+      user,
+      employeeId,
+      dto,
+      assertImage(file),
+    );
   }
 
   // ---- Admin: verification queue ----
@@ -201,7 +231,10 @@ export class PaymentsController {
 
   @Patch('batch/:batchId/confirm')
   @Roles(UserRole.ADMIN)
-  confirmBatch(@CurrentUser('sub') adminId: string, @Param('batchId') batchId: string) {
+  confirmBatch(
+    @CurrentUser('sub') adminId: string,
+    @Param('batchId') batchId: string,
+  ) {
     return this.paymentsService.confirmBatch(batchId, adminId);
   }
 
