@@ -405,15 +405,16 @@ export class EmployeesService {
         { search: `%${query.search}%` },
       );
     }
-    // EFU only ever sees applications the admin has already approved
-    // (payment confirmed). Applications whose payment is still pending or was
-    // rejected never reach the EFU queue.
-    qb.innerJoin(
-      'payments',
-      'pay',
-      'pay.employeeId = employee.id AND pay.status = :confirmedPayment',
-      { confirmedPayment: PaymentStatus.CONFIRMED },
-    );
+    // Optional payment-status filter. EFU sees all applications by default;
+    // the payment status of each is still attached below for reference.
+    if (query.paymentStatus) {
+      qb.innerJoin(
+        'payments',
+        'pay',
+        'pay.employeeId = employee.id AND pay.status = :paymentStatus',
+        { paymentStatus: query.paymentStatus },
+      );
+    }
 
     qb.orderBy('employee.createdAt', 'DESC')
       .skip((page - 1) * limit)
