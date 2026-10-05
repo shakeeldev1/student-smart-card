@@ -23,6 +23,10 @@ import { Payment } from '../payments/entities/payment.entity';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
 import { CardStatus } from '../cards/enums/card-status.enum';
+import {
+  consumeVerificationCode,
+  issueVerificationCode,
+} from '../cards/card-verification.util';
 import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { UserRole } from '../users/enums/user-role.enum';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
@@ -263,6 +267,65 @@ export class EmployeesService {
       throw new NotFoundException('No employee record linked to this account');
     }
     return employee;
+  }
+
+  /** The employee's own record, enriched with their payment for the tracker. */
+  async findMineForUser(
+    userId: string,
+  ): Promise<Employee & { payment: PaymentSummary | null }> {
+    const employee = await this.findByUserId(userId);
+    const payment = await this.paymentsService.getForEmployee(employee.id);
+    return {
+      ...employee,
+      payment: payment ? this.toPaymentSummary(payment) : null,
+    };
+  }
+
+  /** Employee self-service: email the holder a one-time card activation code. */
+  async sendCardVerificationEmail(userId: string): Promise<{ message: string }> {
+    const employee = await this.employeesRepository.findOne({
+      where: { userId },
+      relations: { card: true },
+    });
+    if (!employee) {
+      throw new NotFoundException('No employee record linked to this account');
+    }
+    if (!employee.card) {
+      throw new BadRequestException('No card has been issued yet');
+    }
+    if (!employee.email) {
+      throw new BadRequestException(
+        'An email address is required before card verification can be sent',
+      );
+    }
+
+    const card = employee.card;
+    const code = issueVerificationCode(card);
+    await this.cardsRepository.save(card);
+
+    await this.emailService.sendCardVerificationEmail(
+      employee.email,
+      employee.fullName,
+      card.cardNumber,
+      code,
+    );
+    return { message: 'Verification email sent successfully' };
+  }
+
+  /** Employee self-service: verify the code and activate the card. */
+  async verifyMyCard(userId: string, code: string): Promise<{ valid: boolean }> {
+    const employee = await this.employeesRepository.findOne({
+      where: { userId },
+      relations: { card: true },
+    });
+    if (!employee || !employee.card || typeof code !== 'string') {
+      return { valid: false };
+    }
+    const card = employee.card;
+    const valid = consumeVerificationCode(card, code);
+    // Persist either way — failed attempts are counted.
+    await this.cardsRepository.save(card);
+    return { valid };
   }
 
   async update(

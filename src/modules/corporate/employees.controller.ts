@@ -107,7 +107,22 @@ export class EmployeesController {
   @Get('me')
   @Roles(UserRole.EMPLOYEE)
   getMine(@CurrentUser('sub') userId: string) {
-    return this.employeesService.findByUserId(userId);
+    return this.employeesService.findMineForUser(userId);
+  }
+
+  @Post('me/card/send-verification-email')
+  @Roles(UserRole.EMPLOYEE)
+  sendCardVerificationEmail(@CurrentUser('sub') userId: string) {
+    return this.employeesService.sendCardVerificationEmail(userId);
+  }
+
+  @Post('me/card/verify')
+  @Roles(UserRole.EMPLOYEE)
+  verifyMyCard(
+    @CurrentUser('sub') userId: string,
+    @Body('code') code: string,
+  ) {
+    return this.employeesService.verifyMyCard(userId, code);
   }
 
   // ---- Company / admin management ----
