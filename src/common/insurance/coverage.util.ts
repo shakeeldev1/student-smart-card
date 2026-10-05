@@ -1,7 +1,7 @@
 /**
  * Product variant → takaful/insurance coverage mapping.
  *
- * The EFU Life-WTO plan uses a product variant from 1 to 10; the coverage is a
+ * The EFU Hemayah-WTO plan uses a product variant from 1 to 10; the coverage is a
  * straight multiple: variant 1 = 100,000, variant 2 = 200,000, … variant 10 =
  * 1,000,000 (PKR). Coverage is always derived from the stored variant so the
  * two can never drift out of sync.
