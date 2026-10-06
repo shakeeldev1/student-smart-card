@@ -23,6 +23,7 @@ import { AreaModule } from './modules/area/area.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { CorporateModule } from './modules/corporate/corporate.module';
 import { EcommerceIntegrationModule } from './modules/ecommerce-integration/ecommerce-integration.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { EcommerceIntegrationModule } from './modules/ecommerce-integration/ecom
     PaymentsModule,
     CorporateModule,
     EcommerceIntegrationModule,
+    ReviewsModule,
   ],
   controllers: [AppController],
   providers: [
