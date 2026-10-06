@@ -1,10 +1,17 @@
 import { OtpPurpose } from '../../auth/enums/otp-purpose.enum';
 
+export interface MailAttachment {
+  filename: string;
+  content: Buffer | string;
+  contentType?: string;
+}
+
 export interface SendMailOptions {
   to: string;
   subject: string;
   text?: string;
   html?: string;
+  attachments?: MailAttachment[];
 }
 
 export interface EmailProvider {
@@ -19,6 +26,13 @@ export interface EmailProvider {
     to: string,
     studentName: string,
     setupLink: string,
+  ): Promise<void>;
+  sendAccountSetupEmail(
+    to: string,
+    name: string,
+    roleLabel: string,
+    setupLink: string,
+    isReset?: boolean,
   ): Promise<void>;
   sendPaymentLinkEmail(
     to: string,

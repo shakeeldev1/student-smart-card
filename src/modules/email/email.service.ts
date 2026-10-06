@@ -99,6 +99,9 @@ export class NodemailerEmailService implements EmailProvider, OnModuleInit {
       subject: options.subject,
       text: options.text,
       html: options.html,
+      ...(options.attachments?.length
+        ? { attachments: options.attachments }
+        : {}),
     });
 
     const previewUrl = nodemailer.getTestMessageUrl(info);
@@ -144,6 +147,70 @@ export class NodemailerEmailService implements EmailProvider, OnModuleInit {
         <p>Your Student Smart Card <strong>${cardNumber}</strong> is ready to be verified before use.</p>
         <p style="font-size:24px;font-weight:bold;letter-spacing:4px;margin:20px 0;">${code}</p>
         <p>Use this code to confirm the card belongs to you before it is activated for use.</p>
+      `,
+    });
+  }
+
+  async sendAccountSetupEmail(
+    to: string,
+    name: string,
+    roleLabel: string,
+    setupLink: string,
+    isReset = false,
+  ): Promise<void> {
+    const year = new Date().getFullYear();
+    const heading = isReset
+      ? 'Reset your password'
+      : 'Welcome — set your password';
+    const intro = isReset
+      ? `A password reset was requested for your <strong>${roleLabel}</strong> account on the Student Smart Card system.`
+      : `An administrator has created a <strong>${roleLabel}</strong> account for you on the Student Smart Card system. Set a password to activate it and sign in.`;
+    const cta = isReset ? 'Reset Password' : 'Set Your Password';
+
+    await this.sendMail({
+      to,
+      subject: isReset
+        ? 'Reset your Student Smart Card password'
+        : `Set up your Student Smart Card ${roleLabel} account`,
+      text:
+        `Hello ${name},\n\n` +
+        (isReset
+          ? `A password reset was requested for your ${roleLabel} account on the Student Smart Card system.`
+          : `An administrator has created a ${roleLabel} account for you on the Student Smart Card system. Set a password to activate it and sign in.`) +
+        `\n\nUse this link (valid for 7 days):\n${setupLink}\n\n` +
+        `After signing in you can update your profile details at any time.\n\n` +
+        `— Student Smart Card\n© ${year} Student Smart Card. This is an automated message.`,
+      html: `
+        <div style="margin:0;padding:24px 0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
+            <tr>
+              <td style="background:#0A1628;padding:24px 32px;">
+                <span style="color:#ffffff;font-size:18px;font-weight:bold;letter-spacing:0.3px;">Student&nbsp;Smart&nbsp;Card</span>
+                <span style="color:#C9A84C;font-size:12px;font-weight:bold;display:block;margin-top:4px;letter-spacing:1.5px;text-transform:uppercase;">${heading}</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;color:#0A1628;line-height:1.6;font-size:14px;">
+                <p style="margin:0 0 16px;">Hello ${name},</p>
+                <p style="margin:0 0 24px;">${intro}</p>
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+                  <tr><td style="border-radius:8px;background:#C9A84C;">
+                    <a href="${setupLink}" style="display:inline-block;padding:12px 32px;color:#0A1628;text-decoration:none;font-weight:bold;font-size:14px;border-radius:8px;">${cta}</a>
+                  </td></tr>
+                </table>
+                <p style="margin:0 0 6px;color:#64748b;font-size:12px;">Or open this link (valid for 7 days):</p>
+                <p style="margin:0 0 20px;color:#475569;font-size:12px;word-break:break-all;">${setupLink}</p>
+                <p style="margin:0;color:#64748b;font-size:12px;">After signing in you can update your profile details at any time.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:18px 32px;color:#94a3b8;font-size:11px;line-height:1.5;">
+                If you weren't expecting this, you can ignore this email.<br/>
+                © ${year} Student Smart Card. All rights reserved.
+              </td>
+            </tr>
+          </table>
+        </div>
       `,
     });
   }

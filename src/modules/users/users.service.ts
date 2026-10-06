@@ -1,14 +1,35 @@
 import {
+  BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
+import { randomBytes } from 'crypto';
+import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { UserRole } from './enums/user-role.enum';
 import { Institution } from '../institutions/entities/institution.entity';
 import { Student } from '../students/entities/student.entity';
+import {
+  EMAIL_SERVICE,
+  type EmailProvider,
+} from '../email/interfaces/email-provider.interface';
+import {
+  ADMIN_CREATABLE_ROLES,
+  CreateStaffUserDto,
+} from './dto/create-staff-user.dto';
+
+const SETUP_TOKEN_TTL_DAYS = 7;
+
+const STAFF_ROLE_LABELS: Record<string, string> = {
+  [UserRole.ADMIN]: 'Admin',
+  [UserRole.OPERATOR]: 'Operator',
+  [UserRole.EFU]: 'EFU',
+};
 
 export interface CreateUserInput {
   email: string;
@@ -54,7 +75,120 @@ export class UsersService {
     private readonly institutionsRepository: Repository<Institution>,
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
+    private readonly config: ConfigService,
+    @Inject(EMAIL_SERVICE)
+    private readonly emailService: EmailProvider,
   ) {}
+
+  /** Build the password-setup link the user receives by email. */
+  private buildSetupLink(token: string): string {
+    const base = (
+      this.config.get<string>('FRONTEND_URL') || ''
+    ).replace(/\/+$/, '');
+    return `${base}/account-setup?token=${token}`;
+  }
+
+  /** Issue a fresh one-time setup token (7-day TTL) and persist it. */
+  private async issueSetupToken(user: User): Promise<string> {
+    const token = randomBytes(32).toString('hex');
+    const expires = new Date();
+    expires.setDate(expires.getDate() + SETUP_TOKEN_TTL_DAYS);
+    user.setupToken = token;
+    user.setupTokenExpiresAt = expires;
+    await this.usersRepository.save(user);
+    return token;
+  }
+
+  /**
+   * Admin-provisioned standalone staff account (admin/operator/efu). Creates
+   * the user with a random password, then emails a link so they set their own.
+   */
+  async createStaffUser(
+    dto: CreateStaffUserDto,
+  ): Promise<Omit<User, 'passwordHash'>> {
+    if (!ADMIN_CREATABLE_ROLES.includes(dto.role as never)) {
+      throw new BadRequestException(
+        'Only admin, operator, or EFU accounts can be created here',
+      );
+    }
+
+    const email = dto.email.toLowerCase();
+    const existing = await this.findByEmail(email);
+    if (existing) {
+      throw new ConflictException('A user with this email already exists');
+    }
+
+    const randomPassword = randomBytes(24).toString('hex');
+    const passwordHash = await bcrypt.hash(
+      randomPassword,
+      this.config.get<number>('BCRYPT_SALT_ROUNDS')!,
+    );
+    const user = await this.usersRepository.save(
+      this.usersRepository.create({
+        email,
+        passwordHash,
+        name: dto.name,
+        role: dto.role,
+        phone: dto.phone ?? null,
+        emailVerified: true,
+        isActive: true,
+      }),
+    );
+
+    const token = await this.issueSetupToken(user);
+    await this.emailService.sendAccountSetupEmail(
+      email,
+      dto.name,
+      STAFF_ROLE_LABELS[dto.role] ?? 'staff',
+      this.buildSetupLink(token),
+      false,
+    );
+
+    return this.toSafeUser(user);
+  }
+
+  /** Re-send (or send a reset of) the password-setup link for a staff user. */
+  async resendSetup(id: string): Promise<{ message: string }> {
+    const user = await this.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const token = await this.issueSetupToken(user);
+    // If they already set a password this is effectively a reset.
+    const isReset = user.emailVerified && !!user.passwordHash;
+    await this.emailService.sendAccountSetupEmail(
+      user.email,
+      user.name,
+      STAFF_ROLE_LABELS[user.role] ?? 'staff',
+      this.buildSetupLink(token),
+      isReset,
+    );
+    return { message: 'Setup link sent' };
+  }
+
+  /** Consume a setup token and set the account's password. */
+  async setPasswordWithToken(
+    token: string,
+    password: string,
+  ): Promise<{ message: string }> {
+    const user = await this.usersRepository.findOne({ where: { setupToken: token } });
+    if (!user) {
+      throw new BadRequestException('Invalid or already-used setup link');
+    }
+    if (!user.setupTokenExpiresAt || user.setupTokenExpiresAt < new Date()) {
+      throw new BadRequestException('This setup link has expired');
+    }
+    user.passwordHash = await bcrypt.hash(
+      password,
+      this.config.get<number>('BCRYPT_SALT_ROUNDS')!,
+    );
+    user.setupToken = null;
+    user.setupTokenExpiresAt = null;
+    user.emailVerified = true;
+    user.isActive = true;
+    await this.usersRepository.save(user);
+    return { message: 'Password set successfully. You can now sign in.' };
+  }
 
   private toSafeUser(user: User): Omit<User, 'passwordHash'> {
     const { passwordHash: _passwordHash, ...safeUser } = user;

@@ -36,6 +36,8 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SetupStudentAccountDto } from './dto/setup-student-account.dto';
 import { SetupAreaManagerDto } from '../area/dto/setup-area-manager.dto';
+import { SetPasswordDto } from './dto/set-password.dto';
+import { UsersService } from '../users/users.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { RequestMeta } from './token.service';
 
@@ -50,7 +52,10 @@ function requestMeta(req: Request): RequestMeta {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly usersService: UsersService,
+  ) {}
 
   @Post('register/school')
   @Throttle(AUTH_THROTTLE)
@@ -136,6 +141,13 @@ export class AuthController {
   @Throttle(AUTH_THROTTLE)
   setupAreaManagerAccount(@Body() dto: SetupAreaManagerDto) {
     return this.authService.setupAreaManagerAccount(dto);
+  }
+
+  @Post('set-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(AUTH_THROTTLE)
+  setPassword(@Body() dto: SetPasswordDto) {
+    return this.usersService.setPasswordWithToken(dto.token, dto.password);
   }
 
   @Get('me')

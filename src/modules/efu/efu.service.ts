@@ -1,6 +1,17 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import type { Multer } from 'multer';
+import {
+  EMAIL_SERVICE,
+  type EmailProvider,
+} from '../email/interfaces/email-provider.interface';
+import { EmailExportDto } from './dto/email-export.dto';
 import { Institution } from '../institutions/entities/institution.entity';
 import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { SchoolClass } from '../classes/entities/school-class.entity';
@@ -75,6 +86,16 @@ export interface PaginatedIndividuals {
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 15;
 
+/** Minimal HTML escaping for user-supplied text placed in an email body. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 @Injectable()
 export class EfuService {
   constructor(
@@ -91,7 +112,118 @@ export class EfuService {
     private readonly studentsService: StudentsService,
     private readonly individualsService: IndividualsService,
     private readonly paymentsService: PaymentsService,
+    @Inject(EMAIL_SERVICE)
+    private readonly emailService: EmailProvider,
   ) {}
+
+  /**
+   * Email a pre-generated Excel export (built client-side from the same
+   * columns the dashboard downloads) to a recipient the EFU user typed in.
+   * The sheet is attached as-is; we only compose a professional cover note.
+   */
+  async emailExport(
+    dto: EmailExportDto,
+    file: Multer.File,
+    senderEmail?: string,
+  ): Promise<{ sent: true; to: string }> {
+    const to = dto.to.trim();
+    const label = (dto.label || 'records').trim();
+    const count =
+      typeof dto.recordCount === 'number' ? dto.recordCount : undefined;
+    const fileName = file.originalname || `student-smart-card-${label}.xlsx`;
+
+    const titleLabel = label.replace(/\b\w/g, (c) => c.toUpperCase());
+    const countLine =
+      count !== undefined
+        ? `${count} ${count === 1 ? 'record' : 'records'}`
+        : 'the selected records';
+    const senderLine = senderEmail
+      ? `Shared from the EFU dashboard by ${senderEmail}.`
+      : 'Shared from the EFU dashboard.';
+    const note = dto.note?.trim();
+    const year = new Date().getFullYear();
+
+    const subject = `Student Smart Card — ${titleLabel} export${
+      count !== undefined ? ` (${count})` : ''
+    }`;
+
+    const text =
+      `Student Smart Card — ${titleLabel} export\n\n` +
+      `Please find attached the ${label} export (${countLine}) from the ` +
+      `Student Smart Card system.\n\n${senderLine}` +
+      (note ? `\n\nNote: ${note}` : '') +
+      `\n\nAttachment (Excel .xlsx): ${fileName}\n\n` +
+      `— Student Smart Card\n© ${year} Student Smart Card. This is an automated message.`;
+
+    // Table-based, inline-styled markup for broad email-client compatibility.
+    const html = `
+      <div style="margin:0;padding:24px 0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
+          <tr>
+            <td style="background:#0A1628;padding:24px 32px;">
+              <span style="color:#ffffff;font-size:18px;font-weight:bold;letter-spacing:0.3px;">Student&nbsp;Smart&nbsp;Card</span>
+              <span style="color:#C9A84C;font-size:12px;font-weight:bold;display:block;margin-top:4px;letter-spacing:1.5px;text-transform:uppercase;">EFU Data Export</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;color:#0A1628;line-height:1.6;font-size:14px;">
+              <p style="margin:0 0 16px;">Hello,</p>
+              <p style="margin:0 0 20px;">Please find attached the <strong>${escapeHtml(
+                label,
+              )}</strong> export from the Student Smart Card system.</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin:0 0 20px;">
+                <tr>
+                  <td style="padding:14px 18px;font-size:13px;color:#475569;">Records included</td>
+                  <td style="padding:14px 18px;font-size:13px;color:#0A1628;font-weight:bold;text-align:right;">${escapeHtml(
+                    countLine,
+                  )}</td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 18px;font-size:13px;color:#475569;border-top:1px solid #e2e8f0;">Attached file</td>
+                  <td style="padding:14px 18px;font-size:13px;color:#0A1628;font-weight:bold;text-align:right;border-top:1px solid #e2e8f0;word-break:break-all;">${escapeHtml(
+                    fileName,
+                  )}</td>
+                </tr>
+              </table>
+              ${
+                note
+                  ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px;"><tr><td style="background:#FBF7EC;border-left:4px solid #C9A84C;border-radius:8px;padding:12px 16px;font-size:13px;color:#5b4a1f;"><strong>Note:</strong> ${escapeHtml(
+                      note,
+                    )}</td></tr></table>`
+                  : ''
+              }
+              <p style="margin:0;color:#64748b;font-size:12px;">${escapeHtml(
+                senderLine,
+              )}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:18px 32px;color:#94a3b8;font-size:11px;line-height:1.5;">
+              This is an automated message from the Student Smart Card system. Please do not reply.<br/>
+              © ${year} Student Smart Card. All rights reserved.
+            </td>
+          </tr>
+        </table>
+      </div>
+    `;
+
+    await this.emailService.sendMail({
+      to,
+      subject,
+      text,
+      html,
+      attachments: [
+        {
+          filename: fileName,
+          content: file.buffer,
+          contentType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+      ],
+    });
+
+    return { sent: true, to };
+  }
 
   private toPaymentSummary(payment: Payment): PaymentSummary {
     return {

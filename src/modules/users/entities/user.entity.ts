@@ -41,6 +41,19 @@ export class User {
   @Column({ type: 'varchar', nullable: true })
   profilePhotoPublicId: string | null;
 
+  /**
+   * One-time token for an admin-provisioned staff account to set its own
+   * password (also doubles as an admin-triggered password reset). Entity-backed
+   * roles (student/employee/area manager) keep their own setup tokens on their
+   * respective rows; this is only for accounts that are *just* a user.
+   */
+  @Index({ unique: true, where: '"setupToken" IS NOT NULL' })
+  @Column({ type: 'varchar', nullable: true })
+  setupToken: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  setupTokenExpiresAt: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

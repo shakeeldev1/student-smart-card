@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { UsersService } from './users.service';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
+import { CreateStaffUserDto } from './dto/create-staff-user.dto';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -34,6 +36,16 @@ export class UsersController {
       isActive: isActive === undefined ? undefined : isActive === 'true',
       search,
     });
+  }
+
+  @Post()
+  create(@Body() dto: CreateStaffUserDto) {
+    return this.usersService.createStaffUser(dto);
+  }
+
+  @Post(':id/resend-setup')
+  resendSetup(@Param('id') id: string) {
+    return this.usersService.resendSetup(id);
   }
 
   @Patch(':id/status')
