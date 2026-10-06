@@ -25,4 +25,11 @@ export class UpdatePaymentSettingsDto {
   @IsString()
   @MaxLength(2000)
   instructions?: string;
+
+  // The decoded QR content (so payers get a crisp re-rendered QR). Allow empty
+  // string to clear it.
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  qrData?: string;
 }

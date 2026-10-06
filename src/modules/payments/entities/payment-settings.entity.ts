@@ -34,6 +34,14 @@ export class PaymentSettings {
   @Column({ type: 'varchar', nullable: true })
   qrImagePublicId: string | null;
 
+  /**
+   * The decoded content of the QR (the payment string it encodes). When set,
+   * payers see a freshly-rendered crisp vector QR instead of the raster image,
+   * so it scans instantly at any size.
+   */
+  @Column({ type: 'text', nullable: true })
+  qrData: string | null;
+
   @Column({ type: 'text', nullable: true })
   instructions: string | null;
 
