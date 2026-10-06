@@ -38,6 +38,11 @@ export class UsersController {
     });
   }
 
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.usersService.getUserDetail(id);
+  }
+
   @Post()
   create(@Body() dto: CreateStaffUserDto) {
     return this.usersService.createStaffUser(dto);

@@ -14,6 +14,10 @@ import { User } from './entities/user.entity';
 import { UserRole } from './enums/user-role.enum';
 import { Institution } from '../institutions/entities/institution.entity';
 import { Student } from '../students/entities/student.entity';
+import { Individual } from '../individuals/entities/individual.entity';
+import { Employee } from '../corporate/entities/employee.entity';
+import { Company } from '../corporate/entities/company.entity';
+import { AreaManager } from '../area/entities/area-manager.entity';
 import {
   EMAIL_SERVICE,
   type EmailProvider,
@@ -75,6 +79,14 @@ export class UsersService {
     private readonly institutionsRepository: Repository<Institution>,
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
+    @InjectRepository(Individual)
+    private readonly individualsRepository: Repository<Individual>,
+    @InjectRepository(Employee)
+    private readonly employeesRepository: Repository<Employee>,
+    @InjectRepository(Company)
+    private readonly companiesRepository: Repository<Company>,
+    @InjectRepository(AreaManager)
+    private readonly areaManagersRepository: Repository<AreaManager>,
     private readonly config: ConfigService,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
@@ -309,6 +321,33 @@ export class UsersService {
     return { previousPublicId, profilePhotoUrl: photo.url };
   }
 
+  /**
+   * The role(s) an account actually has a backing record for. An account can
+   * legitimately hold one of these (student/individual/school/corporate/
+   * employee/area_manager) only if the matching row exists — flipping the role
+   * flag alone does NOT move the account between tables, which is how an
+   * "individual" wrongly became a "student" and disappeared from Students.
+   */
+  private async linkedRolesForUser(userId: string): Promise<UserRole[]> {
+    const [student, individual, employee, institution, company, areaManager] =
+      await Promise.all([
+        this.studentsRepository.count({ where: { userId } }),
+        this.individualsRepository.count({ where: { userId } }),
+        this.employeesRepository.count({ where: { userId } }),
+        this.institutionsRepository.count({ where: { ownerUserId: userId } }),
+        this.companiesRepository.count({ where: { ownerUserId: userId } }),
+        this.areaManagersRepository.count({ where: { userId } }),
+      ]);
+    const roles: UserRole[] = [];
+    if (student > 0) roles.push(UserRole.STUDENT);
+    if (individual > 0) roles.push(UserRole.INDIVIDUAL);
+    if (employee > 0) roles.push(UserRole.EMPLOYEE);
+    if (institution > 0) roles.push(UserRole.SCHOOL);
+    if (company > 0) roles.push(UserRole.CORPORATE);
+    if (areaManager > 0) roles.push(UserRole.AREA_MANAGER);
+    return roles;
+  }
+
   async updateRole(
     id: string,
     role: UserRole,
@@ -317,8 +356,174 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    if (role === user.role) {
+      return this.toSafeUser(user);
+    }
+
+    const STAFF_ROLES = [UserRole.ADMIN, UserRole.OPERATOR, UserRole.EFU];
+    const linked = await this.linkedRolesForUser(id);
+
+    // An entity-backed role may only be set if the account has that record.
+    // Staff roles may only be assigned to accounts with no entity record
+    // (otherwise the linked student/individual/… would be orphaned).
+    const allowed = new Set<UserRole>(linked);
+    if (linked.length === 0) STAFF_ROLES.forEach((r) => allowed.add(r));
+
+    if (!allowed.has(role)) {
+      const hint = linked.length
+        ? `This account is linked to a ${linked.join('/')} record, so its role can only be "${linked.join('" or "')}".`
+        : 'This account has no linked record, so it can only be an admin, operator, or EFU user.';
+      throw new BadRequestException(
+        `Can't change the role to "${role}". ${hint}`,
+      );
+    }
+
     user.role = role;
     return this.toSafeUser(await this.usersRepository.save(user));
+  }
+
+  /**
+   * Full account detail plus any linked domain record(s), for the admin
+   * "view user" screen. Also reports whether the account's role matches its
+   * linked record so the UI can offer a one-click correction.
+   */
+  async getUserDetail(id: string): Promise<{
+    user: Omit<User, 'passwordHash'>;
+    linked: Array<{
+      role: UserRole;
+      type: string;
+      title: string;
+      href: string | null;
+      rows: Array<{ label: string; value: string }>;
+    }>;
+    roleMatches: boolean;
+    suggestedRole: UserRole | null;
+  }> {
+    const user = await this.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const S = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+    const linked: Array<{
+      role: UserRole;
+      type: string;
+      title: string;
+      href: string | null;
+      rows: Array<{ label: string; value: string }>;
+    }> = [];
+
+    const [student, individual, employee, institution, company, areaManager] =
+      await Promise.all([
+        this.studentsRepository.findOne({ where: { userId: id } }),
+        this.individualsRepository.findOne({ where: { userId: id } }),
+        this.employeesRepository.findOne({ where: { userId: id } }),
+        this.institutionsRepository.findOne({ where: { ownerUserId: id } }),
+        this.companiesRepository.findOne({ where: { ownerUserId: id } }),
+        this.areaManagersRepository.findOne({ where: { userId: id } }),
+      ]);
+
+    if (student) {
+      linked.push({
+        role: UserRole.STUDENT,
+        type: 'student',
+        title: 'Student record',
+        href: `/admin/students/${student.id}`,
+        rows: [
+          { label: 'Full name', value: S(student.fullName) },
+          { label: 'B-Form', value: S(student.bFormNumber) },
+          { label: 'Roll no', value: S(student.rollNumber) },
+          { label: 'Class', value: S(student.className) },
+          { label: 'Status', value: S(student.status) },
+        ].filter((r) => r.value),
+      });
+    }
+    if (individual) {
+      linked.push({
+        role: UserRole.INDIVIDUAL,
+        type: 'individual',
+        title: 'Individual record',
+        href: null,
+        rows: [
+          { label: 'Full name', value: S(individual.fullName) },
+          { label: 'CNIC', value: S(individual.cnicNumber) },
+          { label: 'Contact', value: S(individual.contactNumber) },
+          { label: 'City', value: S(individual.city) },
+          { label: 'Status', value: S(individual.status) },
+        ].filter((r) => r.value),
+      });
+    }
+    if (employee) {
+      linked.push({
+        role: UserRole.EMPLOYEE,
+        type: 'employee',
+        title: 'Employee record',
+        href: null,
+        rows: [
+          { label: 'Full name', value: S(employee.fullName) },
+          { label: 'CNIC', value: S(employee.cnicNumber) },
+          { label: 'Employee ID', value: S(employee.employeeCode) },
+          { label: 'Department', value: S(employee.department) },
+          { label: 'Status', value: S(employee.status) },
+        ].filter((r) => r.value),
+      });
+    }
+    if (institution) {
+      linked.push({
+        role: UserRole.SCHOOL,
+        type: 'school',
+        title: 'School / institution',
+        href: null,
+        rows: [
+          { label: 'Name', value: S(institution.name) },
+          { label: 'Reg. no', value: S(institution.registrationNumber) },
+          { label: 'City', value: S(institution.city) },
+          { label: 'Approval', value: S(institution.approvalStatus) },
+        ].filter((r) => r.value),
+      });
+    }
+    if (company) {
+      linked.push({
+        role: UserRole.CORPORATE,
+        type: 'company',
+        title: 'Company record',
+        href: null,
+        rows: [
+          { label: 'Name', value: S(company.name) },
+          { label: 'Reg. no', value: S(company.registrationNumber) },
+          { label: 'City', value: S(company.city) },
+          { label: 'Approval', value: S(company.approvalStatus) },
+        ].filter((r) => r.value),
+      });
+    }
+    if (areaManager) {
+      linked.push({
+        role: UserRole.AREA_MANAGER,
+        type: 'area_manager',
+        title: 'Area manager scope',
+        href: null,
+        rows: [
+          { label: 'Level', value: S(areaManager.level) },
+          { label: 'Province', value: S(areaManager.province) },
+          { label: 'District', value: S(areaManager.district) },
+        ].filter((r) => r.value),
+      });
+    }
+
+    const linkedRoles = linked.map((l) => l.role);
+    const roleMatches =
+      linkedRoles.length === 0
+        ? [UserRole.ADMIN, UserRole.OPERATOR, UserRole.EFU].includes(user.role)
+        : linkedRoles.includes(user.role);
+    const suggestedRole =
+      !roleMatches && linkedRoles.length === 1 ? linkedRoles[0] : null;
+
+    return {
+      user: this.toSafeUser(user),
+      linked,
+      roleMatches,
+      suggestedRole,
+    };
   }
 
   async remove(id: string): Promise<{ message: string }> {
