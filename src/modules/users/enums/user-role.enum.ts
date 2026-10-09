@@ -30,4 +30,11 @@ export enum UserRole {
    * the JWT, so scope changes take effect immediately.
    */
   AREA_MANAGER = 'area_manager',
+  /**
+   * Super administrator / IT oversight account. A superuser: the RolesGuard
+   * lets it pass every @Roles() check, so it can open and track all internal
+   * oversight dashboards (Admin, EFU, Operations). Not tied to any entity
+   * record; assigned deliberately by an admin.
+   */
+  SUPER_ADMIN = 'super_admin',
 }

@@ -29,6 +29,12 @@ export class RolesGuard implements CanActivate {
       .getRequest<Request & { user?: JwtPayload }>();
     const user = request.user;
 
+    // Super admin is a superuser — it passes every role-protected route so it
+    // can oversee all internal dashboards.
+    if (user?.role === UserRole.SUPER_ADMIN) {
+      return true;
+    }
+
     if (!user || !requiredRoles.includes(user.role)) {
       throw new ForbiddenException(
         'You do not have permission to access this resource',

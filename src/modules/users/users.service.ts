@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -207,6 +208,15 @@ export class UsersService {
     return safeUser;
   }
 
+  /** Super-admin accounts are not manageable through the admin dashboard. */
+  private assertManageable(user: User): void {
+    if (user.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'This account is managed outside the dashboard.',
+      );
+    }
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     return this.usersRepository.findOne({
       where: { email: email.toLowerCase() },
@@ -250,6 +260,12 @@ export class UsersService {
       .createQueryBuilder('user')
       .select(SAFE_USER_FIELDS);
 
+    // Super-admin accounts are hidden from the admin dashboard entirely — they
+    // are managed outside it.
+    qb.andWhere('user.role != :superRole', {
+      superRole: UserRole.SUPER_ADMIN,
+    });
+
     if (filters.role) {
       qb.andWhere('user.role = :role', { role: filters.role });
     }
@@ -275,6 +291,7 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    this.assertManageable(user);
     user.isActive = isActive;
     return this.toSafeUser(await this.usersRepository.save(user));
   }
@@ -287,6 +304,7 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    this.assertManageable(user);
 
     if (input.email && input.email.toLowerCase() !== user.email) {
       const existing = await this.findByEmail(input.email);
@@ -360,6 +378,15 @@ export class UsersService {
       return this.toSafeUser(user);
     }
 
+    // The super-admin role is managed outside the dashboard (set directly in
+    // the database). It can never be assigned, nor changed away from, via the
+    // admin UI — so a regular admin can neither create nor demote a superuser.
+    if (role === UserRole.SUPER_ADMIN || user.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'The super-admin role is managed outside the dashboard and cannot be changed here.',
+      );
+    }
+
     const STAFF_ROLES = [UserRole.ADMIN, UserRole.OPERATOR, UserRole.EFU];
     const linked = await this.linkedRolesForUser(id);
 
@@ -403,6 +430,7 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    this.assertManageable(user);
 
     const S = (v: unknown) => (v === null || v === undefined ? '' : String(v));
     const linked: Array<{
@@ -513,7 +541,12 @@ export class UsersService {
     const linkedRoles = linked.map((l) => l.role);
     const roleMatches =
       linkedRoles.length === 0
-        ? [UserRole.ADMIN, UserRole.OPERATOR, UserRole.EFU].includes(user.role)
+        ? [
+            UserRole.ADMIN,
+            UserRole.OPERATOR,
+            UserRole.EFU,
+            UserRole.SUPER_ADMIN,
+          ].includes(user.role)
         : linkedRoles.includes(user.role);
     const suggestedRole =
       !roleMatches && linkedRoles.length === 1 ? linkedRoles[0] : null;
@@ -531,6 +564,7 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    this.assertManageable(user);
 
     const [ownedInstitutions, registeredStudents] = await Promise.all([
       this.institutionsRepository.count({ where: { ownerUserId: id } }),

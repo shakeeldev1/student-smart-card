@@ -248,6 +248,36 @@ export class PaymentsController {
     return this.paymentsService.rejectBatch(batchId, adminId, dto.reason);
   }
 
+  @Patch('students/:studentId/mark-paid')
+  @Roles(UserRole.ADMIN)
+  markStudentPaid(
+    @CurrentUser('sub') adminId: string,
+    @Param('studentId') studentId: string,
+    @Body('reference') reference?: string,
+  ) {
+    return this.paymentsService.markPaidOffline('student', studentId, adminId, reference);
+  }
+
+  @Patch('individuals/:individualId/mark-paid')
+  @Roles(UserRole.ADMIN)
+  markIndividualPaid(
+    @CurrentUser('sub') adminId: string,
+    @Param('individualId') individualId: string,
+    @Body('reference') reference?: string,
+  ) {
+    return this.paymentsService.markPaidOffline('individual', individualId, adminId, reference);
+  }
+
+  @Patch('employees/:employeeId/mark-paid')
+  @Roles(UserRole.ADMIN)
+  markEmployeePaid(
+    @CurrentUser('sub') adminId: string,
+    @Param('employeeId') employeeId: string,
+    @Body('reference') reference?: string,
+  ) {
+    return this.paymentsService.markPaidOffline('employee', employeeId, adminId, reference);
+  }
+
   @Patch(':id/confirm')
   @Roles(UserRole.ADMIN)
   confirm(@CurrentUser('sub') adminId: string, @Param('id') id: string) {

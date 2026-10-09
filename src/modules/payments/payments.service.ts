@@ -211,6 +211,61 @@ export class PaymentsService {
     return amount;
   }
 
+  /**
+   * Admin override: mark an application's registration payment as CONFIRMED
+   * without any uploaded proof — for payments settled offline (cash in person,
+   * or via a relative/friend). Creates the payment row if none exists, or
+   * confirms an existing pending/rejected one. The application then flows to
+   * EFU review exactly like a normally-verified payment.
+   */
+  async markPaidOffline(
+    kind: 'student' | 'individual' | 'employee',
+    id: string,
+    adminId: string,
+    reference?: string,
+  ): Promise<Payment> {
+    let key: { studentId?: string; individualId?: string; employeeId?: string };
+    let variant: number | null;
+
+    if (kind === 'student') {
+      const student = await this.studentsRepository.findOne({ where: { id } });
+      if (!student) throw new NotFoundException('Student not found');
+      key = { studentId: id };
+      variant = student.productVariant;
+    } else if (kind === 'individual') {
+      const individual = await this.individualsRepository.findOne({ where: { id } });
+      if (!individual) throw new NotFoundException('Individual not found');
+      key = { individualId: id };
+      variant = individual.productVariant;
+    } else {
+      const employee = await this.employeesRepository.findOne({ where: { id } });
+      if (!employee) throw new NotFoundException('Employee not found');
+      key = { employeeId: id };
+      variant = employee.productVariant;
+    }
+
+    const amount = this.requireFee(variant);
+    const note = reference?.trim() || 'Offline / cash payment (confirmed by admin)';
+
+    const existing = await this.paymentsRepository.findOne({ where: key });
+    if (existing?.status === PaymentStatus.CONFIRMED) {
+      throw new BadRequestException('This registration is already paid and confirmed.');
+    }
+
+    const payment =
+      existing ??
+      this.paymentsRepository.create({ ...key, batchId: null, proofImageUrl: null });
+    payment.amount = amount;
+    payment.productVariant = variant as number;
+    payment.method = PaymentMethod.CASH;
+    payment.status = PaymentStatus.CONFIRMED;
+    payment.reference = note;
+    payment.reviewedByUserId = adminId;
+    payment.reviewedAt = new Date();
+    payment.rejectionReason = null;
+    return this.paymentsRepository.save(payment);
+  }
+
   private async upsert(
     key: { studentId?: string; individualId?: string; employeeId?: string },
     productVariant: number,
