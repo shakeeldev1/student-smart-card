@@ -58,6 +58,12 @@ export class Individual {
   @Column({ type: 'uuid', nullable: true })
   franchiseId: string | null;
 
+  /**
+   * Transient (not persisted): the referring franchise's code, resolved and
+   * attached when serving the holder's own card so it can be shown on the card.
+   */
+  franchiseCode?: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   contactNumber: string | null;
 

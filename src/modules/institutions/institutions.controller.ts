@@ -43,6 +43,18 @@ export class InstitutionsController {
     return institution;
   }
 
+  @Get('me/referral')
+  @Roles(UserRole.SCHOOL)
+  getMyReferral(@CurrentUser('sub') ownerUserId: string) {
+    return this.institutionsService.getMyReferral(ownerUserId);
+  }
+
+  @Get('referrals')
+  @Roles(UserRole.ADMIN)
+  listReferrals() {
+    return this.institutionsService.listReferralStatsForAdmin();
+  }
+
   @Get('pending')
   @Roles(UserRole.OPERATOR, UserRole.ADMIN)
   findPending() {

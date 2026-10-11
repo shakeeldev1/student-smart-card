@@ -46,6 +46,18 @@ export class CompaniesController {
     return this.companiesService.findByOwnerUserId(userId);
   }
 
+  @Get('me/referral')
+  @Roles(UserRole.CORPORATE)
+  getMyReferral(@CurrentUser('sub') userId: string) {
+    return this.companiesService.getMyReferral(userId);
+  }
+
+  @Get('referrals')
+  @Roles(UserRole.ADMIN)
+  listReferrals() {
+    return this.companiesService.listReferralStatsForAdmin();
+  }
+
   @Put('me')
   @Roles(UserRole.CORPORATE)
   updateMine(@CurrentUser('sub') userId: string, @Body() dto: UpdateCompanyDto) {

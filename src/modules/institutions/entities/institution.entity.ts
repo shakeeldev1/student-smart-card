@@ -77,6 +77,14 @@ export class Institution {
   @Column({ type: 'int' })
   numberOfStudents: number;
 
+  /**
+   * Bank-branch-style reference code (SSC-SCH-<PP><DD>-<NNNN>) assigned once the
+   * school is on the system. Used by admin for management and per-head payouts.
+   */
+  @Index({ unique: true, where: '"referralCode" IS NOT NULL' })
+  @Column({ type: 'varchar', nullable: true })
+  referralCode: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   logoUrl: string | null;
 

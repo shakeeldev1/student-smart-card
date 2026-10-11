@@ -178,6 +178,14 @@ export class IndividualsService {
     if (!individual) {
       throw new NotFoundException('No application found for this account');
     }
+    // Attach the referring franchise's code (if any) so it can appear on the card.
+    if (individual.franchiseId) {
+      const franchise = await this.areaManagersRepository.findOne({
+        where: { id: individual.franchiseId },
+        select: { id: true, franchiseCode: true },
+      });
+      individual.franchiseCode = franchise?.franchiseCode ?? null;
+    }
     return individual;
   }
 

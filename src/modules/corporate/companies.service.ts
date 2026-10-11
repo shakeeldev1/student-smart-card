@@ -3,6 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { Company } from './entities/company.entity';
 import { Employee } from './entities/employee.entity';
+import { FranchiseSettings } from '../area/entities/franchise-settings.entity';
+import {
+  buildReferralCode,
+  referralCodePrefix,
+} from '../area/franchise-code.util';
 import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { parseDateRange } from '../../common/utils/date-range.util';
@@ -42,8 +47,129 @@ export class CompaniesService {
     private readonly companiesRepository: Repository<Company>,
     @InjectRepository(Employee)
     private readonly employeesRepository: Repository<Employee>,
+    @InjectRepository(FranchiseSettings)
+    private readonly settingsRepository: Repository<FranchiseSettings>,
     private readonly cloudinaryService: CloudinaryService,
   ) {}
+
+  // ---------------------------------------------------------------------------
+  // Referral programme: a reference code per company + per-head earnings.
+  // Attribution rides the existing employee.companyId link; the code is only an
+  // identifier for admin management and payouts.
+  // ---------------------------------------------------------------------------
+
+  /** Generate + persist a unique SSC-COR reference code if the company lacks one. */
+  async ensureReferralCode(company: Company): Promise<string> {
+    if (company.referralCode) return company.referralCode;
+    const prefix = referralCodePrefix('COR', company.province, company.district);
+    const existing = await this.companiesRepository
+      .createQueryBuilder('c')
+      .where('c.referralCode LIKE :prefix', { prefix: `${prefix}%` })
+      .getCount();
+    let serial = existing + 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const code = buildReferralCode(
+        'COR',
+        company.province,
+        company.district,
+        serial,
+      );
+      const clash = await this.companiesRepository.findOne({
+        where: { referralCode: code },
+      });
+      if (!clash) {
+        company.referralCode = code;
+        await this.companiesRepository.save(company);
+        return code;
+      }
+      serial += 1;
+    }
+  }
+
+  private async getCommissionPerEmployee(): Promise<number> {
+    const settings = await this.settingsRepository.findOne({
+      where: {},
+      order: { createdAt: 'ASC' },
+    });
+    return settings?.commissionPerEmployee ?? 0;
+  }
+
+  /** total + confirmed-paid employee counts per company id. */
+  private async getEmployeeReferralStats(
+    companyIds: string[],
+  ): Promise<Map<string, { total: number; confirmed: number }>> {
+    const map = new Map<string, { total: number; confirmed: number }>();
+    if (companyIds.length === 0) return map;
+    const rows = await this.employeesRepository
+      .createQueryBuilder('e')
+      .select('e.companyId', 'cid')
+      .addSelect('COUNT(*)', 'total')
+      .addSelect(
+        `SUM(CASE WHEN p.status = :confirmed THEN 1 ELSE 0 END)`,
+        'confirmed',
+      )
+      .leftJoin('payments', 'p', 'p."employeeId" = e.id')
+      .where('e.companyId IN (:...ids)', { ids: companyIds })
+      .setParameter('confirmed', 'confirmed')
+      .groupBy('e.companyId')
+      .getRawMany<{ cid: string; total: string; confirmed: string }>();
+    for (const r of rows) {
+      map.set(r.cid, {
+        total: Number(r.total),
+        confirmed: Number(r.confirmed ?? 0),
+      });
+    }
+    return map;
+  }
+
+  /** Self-service: one company's code, registration counts and earnings. */
+  async getMyReferral(ownerUserId: string) {
+    const company = await this.findByOwnerUserId(ownerUserId);
+    if (!company) {
+      throw new NotFoundException('No company found for this account');
+    }
+    const code = await this.ensureReferralCode(company);
+    const [stats, rate] = await Promise.all([
+      this.getEmployeeReferralStats([company.id]),
+      this.getCommissionPerEmployee(),
+    ]);
+    const s = stats.get(company.id) ?? { total: 0, confirmed: 0 };
+    return {
+      code,
+      totalEmployees: s.total,
+      confirmedEmployees: s.confirmed,
+      commissionPerEmployee: rate,
+      earnings: s.confirmed * rate,
+    };
+  }
+
+  /** Admin: every company with its code, counts and earnings. */
+  async listReferralStatsForAdmin() {
+    const companies = await this.companiesRepository.find({
+      order: { createdAt: 'DESC' },
+    });
+    for (const c of companies) {
+      if (!c.referralCode) await this.ensureReferralCode(c);
+    }
+    const [stats, rate] = await Promise.all([
+      this.getEmployeeReferralStats(companies.map((c) => c.id)),
+      this.getCommissionPerEmployee(),
+    ]);
+    return companies.map((c) => {
+      const s = stats.get(c.id) ?? { total: 0, confirmed: 0 };
+      return {
+        id: c.id,
+        name: c.name,
+        city: c.city,
+        referralCode: c.referralCode,
+        totalEmployees: s.total,
+        confirmedEmployees: s.confirmed,
+        commissionPerEmployee: rate,
+        earnings: s.confirmed * rate,
+      };
+    });
+  }
 
   createWithManager(
     manager: EntityManager,
@@ -75,7 +201,10 @@ export class CompaniesService {
     company.approvedByUserId = approvedByUserId;
     company.approvedAt = new Date();
     company.rejectionReason = null;
-    return this.companiesRepository.save(company);
+    const saved = await this.companiesRepository.save(company);
+    // Assign a reference code on approval so it exists before the company asks.
+    await this.ensureReferralCode(saved).catch(() => undefined);
+    return saved;
   }
 
   async reject(id: string, reason?: string): Promise<Company> {

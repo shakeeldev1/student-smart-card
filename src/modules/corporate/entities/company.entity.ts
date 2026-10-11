@@ -75,6 +75,14 @@ export class Company {
   @Column({ type: 'int' })
   numberOfEmployees: number;
 
+  /**
+   * Bank-branch-style reference code (SSC-COR-<PP><DD>-<NNNN>) assigned once the
+   * company is on the system. Used by admin for management and per-head payouts.
+   */
+  @Index({ unique: true, where: '"referralCode" IS NOT NULL' })
+  @Column({ type: 'varchar', nullable: true })
+  referralCode: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   logoUrl: string | null;
 

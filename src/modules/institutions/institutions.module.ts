@@ -2,12 +2,16 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Institution } from './entities/institution.entity';
 import { Student } from '../students/entities/student.entity';
+import { FranchiseSettings } from '../area/entities/franchise-settings.entity';
 import { InstitutionsService } from './institutions.service';
 import { InstitutionsController } from './institutions.controller';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Institution, Student]), CloudinaryModule],
+  imports: [
+    TypeOrmModule.forFeature([Institution, Student, FranchiseSettings]),
+    CloudinaryModule,
+  ],
   providers: [InstitutionsService],
   controllers: [InstitutionsController],
   exports: [InstitutionsService],

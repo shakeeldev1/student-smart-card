@@ -646,12 +646,28 @@ export class AreaService {
 
   async setCommission(
     adminId: string,
-    commissionPerIndividual: number,
+    rates: {
+      commissionPerIndividual?: number;
+      commissionPerStudent?: number;
+      commissionPerEmployee?: number;
+    },
   ): Promise<FranchiseSettings> {
     const settings = await this.getCommissionSettings();
-    settings.commissionPerIndividual = Math.max(
-      0,
-      Math.round(commissionPerIndividual),
+    const clean = (v: number | undefined, current: number) =>
+      v === undefined || v === null || Number.isNaN(Number(v))
+        ? current
+        : Math.max(0, Math.round(Number(v)));
+    settings.commissionPerIndividual = clean(
+      rates.commissionPerIndividual,
+      settings.commissionPerIndividual,
+    );
+    settings.commissionPerStudent = clean(
+      rates.commissionPerStudent,
+      settings.commissionPerStudent,
+    );
+    settings.commissionPerEmployee = clean(
+      rates.commissionPerEmployee,
+      settings.commissionPerEmployee,
     );
     settings.updatedByUserId = adminId;
     return this.franchiseSettingsRepository.save(settings);

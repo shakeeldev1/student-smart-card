@@ -41,12 +41,18 @@ export class AreaAdminController {
   @Patch('commission')
   setCommission(
     @CurrentUser('sub') adminId: string,
-    @Body('commissionPerIndividual') commissionPerIndividual: number,
+    @Body()
+    body: {
+      commissionPerIndividual?: number;
+      commissionPerStudent?: number;
+      commissionPerEmployee?: number;
+    },
   ) {
-    return this.areaService.setCommission(
-      adminId,
-      Number(commissionPerIndividual) || 0,
-    );
+    return this.areaService.setCommission(adminId, {
+      commissionPerIndividual: body.commissionPerIndividual,
+      commissionPerStudent: body.commissionPerStudent,
+      commissionPerEmployee: body.commissionPerEmployee,
+    });
   }
 
   @Post()

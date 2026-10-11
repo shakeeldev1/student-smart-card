@@ -4,6 +4,7 @@ import { Company } from './entities/company.entity';
 import { Employee } from './entities/employee.entity';
 import { EmployeeCard } from './entities/employee-card.entity';
 import { Payment } from '../payments/entities/payment.entity';
+import { FranchiseSettings } from '../area/entities/franchise-settings.entity';
 import { CompaniesService } from './companies.service';
 import { EmployeesService } from './employees.service';
 import { CompaniesController } from './companies.controller';
@@ -15,7 +16,13 @@ import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Company, Employee, EmployeeCard, Payment]),
+    TypeOrmModule.forFeature([
+      Company,
+      Employee,
+      EmployeeCard,
+      Payment,
+      FranchiseSettings,
+    ]),
     CardsModule,
     PaymentsModule,
     CloudinaryModule,
