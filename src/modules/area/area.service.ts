@@ -33,6 +33,8 @@ import {
   EMAIL_SERVICE,
   type EmailProvider,
 } from '../email/interfaces/email-provider.interface';
+import { CommissionService } from '../commission/commission.service';
+import { CommissionChannel } from '../commission/enums/commission-channel.enum';
 
 type GeoColumn = 'province' | 'region' | 'district' | 'tehsil';
 
@@ -70,6 +72,7 @@ export class AreaService {
     private readonly config: ConfigService,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
+    private readonly commissionService: CommissionService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -673,55 +676,46 @@ export class AreaService {
     return this.franchiseSettingsRepository.save(settings);
   }
 
-  /** Referral counts (total + confirmed-paid) per franchise id. */
-  private async getReferralStats(
+  /** Total referred-individual counts per franchise id. */
+  private async getReferralCounts(
     franchiseIds: string[],
-  ): Promise<Map<string, { total: number; confirmed: number }>> {
-    const map = new Map<string, { total: number; confirmed: number }>();
+  ): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
     if (franchiseIds.length === 0) return map;
     const rows = await this.individualsRepository
       .createQueryBuilder('i')
       .select('i.franchiseId', 'fid')
       .addSelect('COUNT(*)', 'total')
-      .addSelect(
-        `SUM(CASE WHEN p.status = :confirmed THEN 1 ELSE 0 END)`,
-        'confirmed',
-      )
-      .leftJoin('payments', 'p', 'p."individualId" = i.id')
       .where('i.franchiseId IN (:...ids)', { ids: franchiseIds })
-      .setParameter('confirmed', 'confirmed')
       .groupBy('i.franchiseId')
-      .getRawMany<{ fid: string; total: string; confirmed: string }>();
-    for (const r of rows) {
-      map.set(r.fid, {
-        total: Number(r.total),
-        confirmed: Number(r.confirmed ?? 0),
-      });
-    }
+      .getRawMany<{ fid: string; total: string }>();
+    for (const r of rows) map.set(r.fid, Number(r.total));
     return map;
   }
 
-  /** Manager-facing franchise summary: code, referral counts, earnings. */
+  /** Manager-facing franchise summary: code, counts, earned/paid/outstanding. */
   async getFranchiseForUser(userId: string) {
     const manager = await this.managersRepository.findOne({ where: { userId } });
     if (!manager) {
       throw new ForbiddenException('No franchise is assigned to this account.');
     }
     const code = await this.ensureFranchiseCode(manager);
-    const [stats, settings] = await Promise.all([
-      this.getReferralStats([manager.id]),
-      this.getCommissionSettings(),
+    const [counts, summary, payouts] = await Promise.all([
+      this.getReferralCounts([manager.id]),
+      this.commissionService.getSummary(CommissionChannel.FRANCHISE, manager.id),
+      this.commissionService.listPayouts(CommissionChannel.FRANCHISE, manager.id),
     ]);
-    const s = stats.get(manager.id) ?? { total: 0, confirmed: 0 };
     const frontendUrl =
       this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
     return {
       code,
       referralLink: `${frontendUrl}/register/individual?ref=${encodeURIComponent(code)}`,
-      totalReferrals: s.total,
-      confirmedReferrals: s.confirmed,
-      commissionPerIndividual: settings.commissionPerIndividual,
-      earnings: s.confirmed * settings.commissionPerIndividual,
+      totalReferrals: counts.get(manager.id) ?? 0,
+      confirmedReferrals: summary.confirmedCount,
+      earned: summary.earned,
+      paid: summary.paid,
+      outstanding: summary.outstanding,
+      payouts,
     };
   }
 
@@ -873,12 +867,13 @@ export class AreaService {
     for (const m of managers) {
       if (!m.franchiseCode) await this.ensureFranchiseCode(m);
     }
-    const [stats, settings] = await Promise.all([
-      this.getReferralStats(managers.map((m) => m.id)),
-      this.getCommissionSettings(),
+    const ids = managers.map((m) => m.id);
+    const [counts, summaries] = await Promise.all([
+      this.getReferralCounts(ids),
+      this.commissionService.getSummaries(CommissionChannel.FRANCHISE, ids),
     ]);
     return managers.map((m) => {
-      const s = stats.get(m.id) ?? { total: 0, confirmed: 0 };
+      const s = summaries.get(m.id);
       return {
         ...this.toDetail(
           m,
@@ -888,9 +883,11 @@ export class AreaService {
           m.user?.isActive ?? false,
           Boolean(m.setupToken),
         ),
-        totalReferrals: s.total,
-        confirmedReferrals: s.confirmed,
-        earnings: s.confirmed * settings.commissionPerIndividual,
+        totalReferrals: counts.get(m.id) ?? 0,
+        confirmedReferrals: s?.confirmedCount ?? 0,
+        earned: s?.earned ?? 0,
+        paid: s?.paid ?? 0,
+        outstanding: s?.outstanding ?? 0,
       };
     });
   }

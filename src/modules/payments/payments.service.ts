@@ -21,6 +21,7 @@ import { PaymentMethod } from './enums/payment-method.enum';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { SubmitPaymentDto } from './dto/submit-payment.dto';
 import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
+import { CommissionService } from '../commission/commission.service';
 
 export interface PaymentListFilters {
   status?: PaymentStatus;
@@ -42,6 +43,7 @@ export class PaymentsService {
     @InjectRepository(Employee)
     private readonly employeesRepository: Repository<Employee>,
     private readonly cloudinary: CloudinaryService,
+    private readonly commissionService: CommissionService,
   ) {}
 
   // ---- Settings (admin-managed bank details + QR) ----
@@ -263,7 +265,9 @@ export class PaymentsService {
     payment.reviewedByUserId = adminId;
     payment.reviewedAt = new Date();
     payment.rejectionReason = null;
-    return this.paymentsRepository.save(payment);
+    const saved = await this.paymentsRepository.save(payment);
+    await this.commissionService.recordForPayment(saved);
+    return saved;
   }
 
   private async upsert(
@@ -474,9 +478,11 @@ export class PaymentsService {
       throw new NotFoundException('Payment batch not found');
     }
     let count = 0;
+    const confirmed: Payment[] = [];
     // Atomic: a mid-loop failure must not leave a batch half-confirmed.
     await this.paymentsRepository.manager.transaction(async (manager) => {
       count = 0;
+      confirmed.length = 0;
       for (const payment of rows) {
         if (payment.status !== PaymentStatus.PENDING) continue;
         payment.status = PaymentStatus.CONFIRMED;
@@ -484,9 +490,14 @@ export class PaymentsService {
         payment.reviewedAt = new Date();
         payment.rejectionReason = null;
         await manager.save(payment);
+        confirmed.push(payment);
         count += 1;
       }
     });
+    // Freeze each confirmed row's partner commission after the batch commits.
+    for (const payment of confirmed) {
+      await this.commissionService.recordForPayment(payment);
+    }
     return { count };
   }
 
@@ -762,7 +773,10 @@ export class PaymentsService {
     payment.reviewedByUserId = adminId;
     payment.reviewedAt = new Date();
     payment.rejectionReason = null;
-    return this.paymentsRepository.save(payment);
+    const saved = await this.paymentsRepository.save(payment);
+    // Freeze the partner commission at the rate in force right now.
+    await this.commissionService.recordForPayment(saved);
+    return saved;
   }
 
   async reject(id: string, adminId: string, reason?: string): Promise<Payment> {

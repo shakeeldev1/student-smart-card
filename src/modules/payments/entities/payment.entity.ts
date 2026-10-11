@@ -92,6 +92,24 @@ export class Payment {
   @Column({ type: 'text', nullable: true })
   rejectionReason: string | null;
 
+  // ---- Commission snapshot (set once, when the payment is confirmed) ----
+  // The referring partner and the commission amount are frozen here at
+  // confirmation time so later rate changes never rewrite historical earnings.
+  // Null when the registration isn't attributed to any partner.
+
+  /** CommissionChannel value: 'franchise' | 'school' | 'corporate'. */
+  @Column({ type: 'varchar', nullable: true })
+  commissionChannel: string | null;
+
+  /** area_manager / institution / company id that earns this commission. */
+  @Index()
+  @Column({ type: 'uuid', nullable: true })
+  commissionPartnerId: string | null;
+
+  /** Commission (PKR) frozen at confirmation. */
+  @Column({ type: 'int', nullable: true })
+  commissionAmount: number | null;
+
   // Reserved for a future online payment gateway.
   @Column({ type: 'varchar', nullable: true })
   gatewayProvider: string | null;
