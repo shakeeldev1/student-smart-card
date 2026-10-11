@@ -3,11 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { Company } from './entities/company.entity';
 import { Employee } from './entities/employee.entity';
-import { FranchiseSettings } from '../area/entities/franchise-settings.entity';
 import {
   buildReferralCode,
   referralCodePrefix,
 } from '../area/franchise-code.util';
+import { CommissionService } from '../commission/commission.service';
+import { CommissionChannel } from '../commission/enums/commission-channel.enum';
 import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { parseDateRange } from '../../common/utils/date-range.util';
@@ -47,9 +48,8 @@ export class CompaniesService {
     private readonly companiesRepository: Repository<Company>,
     @InjectRepository(Employee)
     private readonly employeesRepository: Repository<Employee>,
-    @InjectRepository(FranchiseSettings)
-    private readonly settingsRepository: Repository<FranchiseSettings>,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly commissionService: CommissionService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -87,64 +87,47 @@ export class CompaniesService {
     }
   }
 
-  private async getCommissionPerEmployee(): Promise<number> {
-    const settings = await this.settingsRepository.findOne({
-      where: {},
-      order: { createdAt: 'ASC' },
-    });
-    return settings?.commissionPerEmployee ?? 0;
-  }
-
-  /** total + confirmed-paid employee counts per company id. */
-  private async getEmployeeReferralStats(
+  /** Total enrolled employee count per company id. */
+  private async getEmployeeCounts(
     companyIds: string[],
-  ): Promise<Map<string, { total: number; confirmed: number }>> {
-    const map = new Map<string, { total: number; confirmed: number }>();
+  ): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
     if (companyIds.length === 0) return map;
     const rows = await this.employeesRepository
       .createQueryBuilder('e')
       .select('e.companyId', 'cid')
       .addSelect('COUNT(*)', 'total')
-      .addSelect(
-        `SUM(CASE WHEN p.status = :confirmed THEN 1 ELSE 0 END)`,
-        'confirmed',
-      )
-      .leftJoin('payments', 'p', 'p."employeeId" = e.id')
       .where('e.companyId IN (:...ids)', { ids: companyIds })
-      .setParameter('confirmed', 'confirmed')
       .groupBy('e.companyId')
-      .getRawMany<{ cid: string; total: string; confirmed: string }>();
-    for (const r of rows) {
-      map.set(r.cid, {
-        total: Number(r.total),
-        confirmed: Number(r.confirmed ?? 0),
-      });
-    }
+      .getRawMany<{ cid: string; total: string }>();
+    for (const r of rows) map.set(r.cid, Number(r.total));
     return map;
   }
 
-  /** Self-service: one company's code, registration counts and earnings. */
+  /** Self-service: one company's code, counts and earned/paid/outstanding. */
   async getMyReferral(ownerUserId: string) {
     const company = await this.findByOwnerUserId(ownerUserId);
     if (!company) {
       throw new NotFoundException('No company found for this account');
     }
     const code = await this.ensureReferralCode(company);
-    const [stats, rate] = await Promise.all([
-      this.getEmployeeReferralStats([company.id]),
-      this.getCommissionPerEmployee(),
+    const [counts, summary, payouts] = await Promise.all([
+      this.getEmployeeCounts([company.id]),
+      this.commissionService.getSummary(CommissionChannel.CORPORATE, company.id),
+      this.commissionService.listPayouts(CommissionChannel.CORPORATE, company.id),
     ]);
-    const s = stats.get(company.id) ?? { total: 0, confirmed: 0 };
     return {
       code,
-      totalEmployees: s.total,
-      confirmedEmployees: s.confirmed,
-      commissionPerEmployee: rate,
-      earnings: s.confirmed * rate,
+      totalEmployees: counts.get(company.id) ?? 0,
+      confirmedEmployees: summary.confirmedCount,
+      earned: summary.earned,
+      paid: summary.paid,
+      outstanding: summary.outstanding,
+      payouts,
     };
   }
 
-  /** Admin: every company with its code, counts and earnings. */
+  /** Admin: every company with its code, counts and earned/paid/outstanding. */
   async listReferralStatsForAdmin() {
     const companies = await this.companiesRepository.find({
       order: { createdAt: 'DESC' },
@@ -152,21 +135,23 @@ export class CompaniesService {
     for (const c of companies) {
       if (!c.referralCode) await this.ensureReferralCode(c);
     }
-    const [stats, rate] = await Promise.all([
-      this.getEmployeeReferralStats(companies.map((c) => c.id)),
-      this.getCommissionPerEmployee(),
+    const ids = companies.map((c) => c.id);
+    const [counts, summaries] = await Promise.all([
+      this.getEmployeeCounts(ids),
+      this.commissionService.getSummaries(CommissionChannel.CORPORATE, ids),
     ]);
     return companies.map((c) => {
-      const s = stats.get(c.id) ?? { total: 0, confirmed: 0 };
+      const s = summaries.get(c.id);
       return {
         id: c.id,
         name: c.name,
         city: c.city,
         referralCode: c.referralCode,
-        totalEmployees: s.total,
-        confirmedEmployees: s.confirmed,
-        commissionPerEmployee: rate,
-        earnings: s.confirmed * rate,
+        totalEmployees: counts.get(c.id) ?? 0,
+        confirmedEmployees: s?.confirmedCount ?? 0,
+        earned: s?.earned ?? 0,
+        paid: s?.paid ?? 0,
+        outstanding: s?.outstanding ?? 0,
       };
     });
   }

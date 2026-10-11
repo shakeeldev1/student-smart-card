@@ -24,6 +24,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { CorporateModule } from './modules/corporate/corporate.module';
 import { EcommerceIntegrationModule } from './modules/ecommerce-integration/ecommerce-integration.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
+import { CommissionModule } from './modules/commission/commission.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
     CorporateModule,
     EcommerceIntegrationModule,
     ReviewsModule,
+    CommissionModule,
   ],
   controllers: [AppController],
   providers: [

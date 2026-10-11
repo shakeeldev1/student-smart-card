@@ -9,11 +9,13 @@ import { PaymentSettings } from './entities/payment-settings.entity';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { PublicPaymentsController } from './public-payments.controller';
+import { CommissionModule } from '../commission/commission.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Payment, PaymentSettings, Student, Individual, Employee]),
     CloudinaryModule,
+    CommissionModule,
   ],
   controllers: [PaymentsController, PublicPaymentsController],
   providers: [PaymentsService],

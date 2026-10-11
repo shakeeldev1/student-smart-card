@@ -3,11 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { Institution } from './entities/institution.entity';
 import { Student } from '../students/entities/student.entity';
-import { FranchiseSettings } from '../area/entities/franchise-settings.entity';
 import {
   buildReferralCode,
   referralCodePrefix,
 } from '../area/franchise-code.util';
+import { CommissionService } from '../commission/commission.service';
+import { CommissionChannel } from '../commission/enums/commission-channel.enum';
 import { InstitutionApprovalStatus } from './enums/institution-approval-status.enum';
 import { InstitutionType } from './enums/institution-type.enum';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
@@ -46,9 +47,8 @@ export class InstitutionsService {
     private readonly institutionsRepository: Repository<Institution>,
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
-    @InjectRepository(FranchiseSettings)
-    private readonly settingsRepository: Repository<FranchiseSettings>,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly commissionService: CommissionService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -91,64 +91,47 @@ export class InstitutionsService {
     }
   }
 
-  private async getCommissionPerStudent(): Promise<number> {
-    const settings = await this.settingsRepository.findOne({
-      where: {},
-      order: { createdAt: 'ASC' },
-    });
-    return settings?.commissionPerStudent ?? 0;
-  }
-
-  /** total + confirmed-paid student counts per institution id. */
-  private async getStudentReferralStats(
+  /** Total enrolled student count per institution id. */
+  private async getStudentCounts(
     institutionIds: string[],
-  ): Promise<Map<string, { total: number; confirmed: number }>> {
-    const map = new Map<string, { total: number; confirmed: number }>();
+  ): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
     if (institutionIds.length === 0) return map;
     const rows = await this.studentsRepository
       .createQueryBuilder('s')
       .select('s.institutionId', 'iid')
       .addSelect('COUNT(*)', 'total')
-      .addSelect(
-        `SUM(CASE WHEN p.status = :confirmed THEN 1 ELSE 0 END)`,
-        'confirmed',
-      )
-      .leftJoin('payments', 'p', 'p."studentId" = s.id')
       .where('s.institutionId IN (:...ids)', { ids: institutionIds })
-      .setParameter('confirmed', 'confirmed')
       .groupBy('s.institutionId')
-      .getRawMany<{ iid: string; total: string; confirmed: string }>();
-    for (const r of rows) {
-      map.set(r.iid, {
-        total: Number(r.total),
-        confirmed: Number(r.confirmed ?? 0),
-      });
-    }
+      .getRawMany<{ iid: string; total: string }>();
+    for (const r of rows) map.set(r.iid, Number(r.total));
     return map;
   }
 
-  /** Self-service: one school's code, registration counts and earnings. */
+  /** Self-service: one school's code, counts and earned/paid/outstanding. */
   async getMyReferral(ownerUserId: string) {
     const institution = await this.findByOwnerUserId(ownerUserId);
     if (!institution) {
       throw new NotFoundException('No institution found for this account');
     }
     const code = await this.ensureReferralCode(institution);
-    const [stats, rate] = await Promise.all([
-      this.getStudentReferralStats([institution.id]),
-      this.getCommissionPerStudent(),
+    const [counts, summary, payouts] = await Promise.all([
+      this.getStudentCounts([institution.id]),
+      this.commissionService.getSummary(CommissionChannel.SCHOOL, institution.id),
+      this.commissionService.listPayouts(CommissionChannel.SCHOOL, institution.id),
     ]);
-    const s = stats.get(institution.id) ?? { total: 0, confirmed: 0 };
     return {
       code,
-      totalStudents: s.total,
-      confirmedStudents: s.confirmed,
-      commissionPerStudent: rate,
-      earnings: s.confirmed * rate,
+      totalStudents: counts.get(institution.id) ?? 0,
+      confirmedStudents: summary.confirmedCount,
+      earned: summary.earned,
+      paid: summary.paid,
+      outstanding: summary.outstanding,
+      payouts,
     };
   }
 
-  /** Admin: every school with its code, counts and earnings. */
+  /** Admin: every school with its code, counts and earned/paid/outstanding. */
   async listReferralStatsForAdmin() {
     const institutions = await this.institutionsRepository.find({
       order: { createdAt: 'DESC' },
@@ -156,21 +139,23 @@ export class InstitutionsService {
     for (const inst of institutions) {
       if (!inst.referralCode) await this.ensureReferralCode(inst);
     }
-    const [stats, rate] = await Promise.all([
-      this.getStudentReferralStats(institutions.map((i) => i.id)),
-      this.getCommissionPerStudent(),
+    const ids = institutions.map((i) => i.id);
+    const [counts, summaries] = await Promise.all([
+      this.getStudentCounts(ids),
+      this.commissionService.getSummaries(CommissionChannel.SCHOOL, ids),
     ]);
     return institutions.map((inst) => {
-      const s = stats.get(inst.id) ?? { total: 0, confirmed: 0 };
+      const s = summaries.get(inst.id);
       return {
         id: inst.id,
         name: inst.name,
         city: inst.city,
         referralCode: inst.referralCode,
-        totalStudents: s.total,
-        confirmedStudents: s.confirmed,
-        commissionPerStudent: rate,
-        earnings: s.confirmed * rate,
+        totalStudents: counts.get(inst.id) ?? 0,
+        confirmedStudents: s?.confirmedCount ?? 0,
+        earned: s?.earned ?? 0,
+        paid: s?.paid ?? 0,
+        outstanding: s?.outstanding ?? 0,
       };
     });
   }

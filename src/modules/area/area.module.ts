@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { AreaService } from './area.service';
 import { AreaController } from './area.controller';
 import { AreaAdminController } from './area-admin.controller';
+import { CommissionModule } from '../commission/commission.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AreaAdminController } from './area-admin.controller';
       Individual,
     ]),
     UsersModule,
+    CommissionModule,
   ],
   controllers: [AreaController, AreaAdminController],
   providers: [AreaService],
