@@ -45,6 +45,15 @@ export class AreaManager {
   @Column({ type: 'varchar', nullable: true })
   tehsil: string | null;
 
+  /**
+   * Meaningful, bank-branch-style franchise code (e.g. "SSC-7205-0001"). An
+   * area manager doubles as a franchise: individuals can register with this
+   * code so the franchise is credited a commission per confirmed registration.
+   */
+  @Index({ unique: true, where: '"franchiseCode" IS NOT NULL' })
+  @Column({ type: 'varchar', nullable: true })
+  franchiseCode: string | null;
+
   /** One-time password-setup token emailed to the manager on creation. */
   @Column({ type: 'varchar', nullable: true })
   setupToken: string | null;

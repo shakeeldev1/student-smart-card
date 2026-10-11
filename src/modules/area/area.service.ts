@@ -12,16 +12,19 @@ import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { Inject } from '@nestjs/common';
 import { AreaManager } from './entities/area-manager.entity';
+import { FranchiseSettings } from './entities/franchise-settings.entity';
 import {
   AreaLevel,
   childLevel,
   requiredAreaColumns,
 } from './enums/area-level.enum';
+import { buildFranchiseCode, franchiseCodePrefix } from './franchise-code.util';
 import { CreateAreaManagerDto } from './dto/create-area-manager.dto';
 import { UpdateAreaManagerDto } from './dto/update-area-manager.dto';
 import { Institution } from '../institutions/entities/institution.entity';
 import { InstitutionApprovalStatus } from '../institutions/enums/institution-approval-status.enum';
 import { Student } from '../students/entities/student.entity';
+import { Individual } from '../individuals/entities/individual.entity';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
 import { Gender } from '../students/enums/gender.enum';
 import { UsersService } from '../users/users.service';
@@ -59,6 +62,10 @@ export class AreaService {
     private readonly institutionsRepository: Repository<Institution>,
     @InjectRepository(Student)
     private readonly studentsRepository: Repository<Student>,
+    @InjectRepository(Individual)
+    private readonly individualsRepository: Repository<Individual>,
+    @InjectRepository(FranchiseSettings)
+    private readonly franchiseSettingsRepository: Repository<FranchiseSettings>,
     private readonly usersService: UsersService,
     private readonly config: ConfigService,
     @Inject(EMAIL_SERVICE)
@@ -595,6 +602,149 @@ export class AreaService {
   }
 
   // ---------------------------------------------------------------------------
+  // Franchise programme (area managers double as franchises)
+  // ---------------------------------------------------------------------------
+
+  /** Generate + persist a unique franchise code for a manager if it lacks one. */
+  async ensureFranchiseCode(manager: AreaManager): Promise<string> {
+    if (manager.franchiseCode) return manager.franchiseCode;
+    const prefix = franchiseCodePrefix(manager.province, manager.district);
+    // Serial = count of existing codes sharing this province+district prefix.
+    const existing = await this.managersRepository
+      .createQueryBuilder('m')
+      .where('m.franchiseCode LIKE :prefix', { prefix: `${prefix}%` })
+      .getCount();
+    let serial = existing + 1;
+    // Guard against collisions (e.g. a backfilled gap) by probing uniqueness.
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const code = buildFranchiseCode(manager.province, manager.district, serial);
+      const clash = await this.managersRepository.findOne({
+        where: { franchiseCode: code },
+      });
+      if (!clash) {
+        manager.franchiseCode = code;
+        await this.managersRepository.save(manager);
+        return code;
+      }
+      serial += 1;
+    }
+  }
+
+  async getCommissionSettings(): Promise<FranchiseSettings> {
+    let settings = await this.franchiseSettingsRepository.findOne({
+      where: {},
+      order: { createdAt: 'ASC' },
+    });
+    if (!settings) {
+      settings = await this.franchiseSettingsRepository.save(
+        this.franchiseSettingsRepository.create({ commissionPerIndividual: 0 }),
+      );
+    }
+    return settings;
+  }
+
+  async setCommission(
+    adminId: string,
+    commissionPerIndividual: number,
+  ): Promise<FranchiseSettings> {
+    const settings = await this.getCommissionSettings();
+    settings.commissionPerIndividual = Math.max(
+      0,
+      Math.round(commissionPerIndividual),
+    );
+    settings.updatedByUserId = adminId;
+    return this.franchiseSettingsRepository.save(settings);
+  }
+
+  /** Referral counts (total + confirmed-paid) per franchise id. */
+  private async getReferralStats(
+    franchiseIds: string[],
+  ): Promise<Map<string, { total: number; confirmed: number }>> {
+    const map = new Map<string, { total: number; confirmed: number }>();
+    if (franchiseIds.length === 0) return map;
+    const rows = await this.individualsRepository
+      .createQueryBuilder('i')
+      .select('i.franchiseId', 'fid')
+      .addSelect('COUNT(*)', 'total')
+      .addSelect(
+        `SUM(CASE WHEN p.status = :confirmed THEN 1 ELSE 0 END)`,
+        'confirmed',
+      )
+      .leftJoin('payments', 'p', 'p."individualId" = i.id')
+      .where('i.franchiseId IN (:...ids)', { ids: franchiseIds })
+      .setParameter('confirmed', 'confirmed')
+      .groupBy('i.franchiseId')
+      .getRawMany<{ fid: string; total: string; confirmed: string }>();
+    for (const r of rows) {
+      map.set(r.fid, {
+        total: Number(r.total),
+        confirmed: Number(r.confirmed ?? 0),
+      });
+    }
+    return map;
+  }
+
+  /** Manager-facing franchise summary: code, referral counts, earnings. */
+  async getFranchiseForUser(userId: string) {
+    const manager = await this.managersRepository.findOne({ where: { userId } });
+    if (!manager) {
+      throw new ForbiddenException('No franchise is assigned to this account.');
+    }
+    const code = await this.ensureFranchiseCode(manager);
+    const [stats, settings] = await Promise.all([
+      this.getReferralStats([manager.id]),
+      this.getCommissionSettings(),
+    ]);
+    const s = stats.get(manager.id) ?? { total: 0, confirmed: 0 };
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
+    return {
+      code,
+      referralLink: `${frontendUrl}/register/individual?ref=${encodeURIComponent(code)}`,
+      totalReferrals: s.total,
+      confirmedReferrals: s.confirmed,
+      commissionPerIndividual: settings.commissionPerIndividual,
+      earnings: s.confirmed * settings.commissionPerIndividual,
+    };
+  }
+
+  /** Email a prospective individual a referral invite pre-filled with the code. */
+  async invite(userId: string, toEmail: string) {
+    const manager = await this.managersRepository.findOne({
+      where: { userId },
+      relations: { user: true },
+    });
+    if (!manager) {
+      throw new ForbiddenException('No franchise is assigned to this account.');
+    }
+    const code = await this.ensureFranchiseCode(manager);
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
+    const link = `${frontendUrl}/register/individual?ref=${encodeURIComponent(code)}`;
+    const franchiseName = manager.user?.name ?? 'Student Smart Card';
+    await this.emailService.sendMail({
+      to: toEmail,
+      subject: 'You are invited to register for a Student Smart Card',
+      text: `Hello,\n\n${franchiseName} has invited you to register for a Student Smart Card.\n\nUse this link to apply (your franchise code ${code} will be filled in automatically):\n${link}\n\nIf you did not expect this, you can ignore this email.`,
+      html: `
+        <div style="font-family:Arial,Helvetica,sans-serif;color:#0A1628;line-height:1.6;">
+          <p>Hello,</p>
+          <p><strong>${franchiseName}</strong> has invited you to register for a <strong>Student Smart Card</strong>.</p>
+          <p style="margin:28px 0;">
+            <a href="${link}" style="background-color:#C9A84C;color:#0A1628;padding:12px 30px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+              Start your application
+            </a>
+          </p>
+          <p style="color:#555;font-size:13px;">Your franchise code <strong>${code}</strong> will be filled in automatically. You can also enter it manually on the form.</p>
+          <p style="color:#888;font-size:12px;">If you did not expect this, you can ignore this email.</p>
+        </div>
+      `,
+    });
+    return { message: `Invitation sent to ${toEmail}` };
+  }
+
+  // ---------------------------------------------------------------------------
   // Admin provisioning
   // ---------------------------------------------------------------------------
 
@@ -684,6 +834,7 @@ export class AreaService {
       setupTokenExpiresAt,
     });
     await this.managersRepository.save(manager);
+    await this.ensureFranchiseCode(manager);
 
     const label = this.scopeLabel({
       level: manager.level,
@@ -702,16 +853,30 @@ export class AreaService {
       relations: { user: true },
       order: { createdAt: 'DESC' },
     });
-    return managers.map((m) =>
-      this.toDetail(
-        m,
-        m.user?.email ?? '',
-        m.user?.name ?? '',
-        m.user?.phone ?? null,
-        m.user?.isActive ?? false,
-        Boolean(m.setupToken),
-      ),
-    );
+    // Backfill any missing franchise codes so existing managers get one too.
+    for (const m of managers) {
+      if (!m.franchiseCode) await this.ensureFranchiseCode(m);
+    }
+    const [stats, settings] = await Promise.all([
+      this.getReferralStats(managers.map((m) => m.id)),
+      this.getCommissionSettings(),
+    ]);
+    return managers.map((m) => {
+      const s = stats.get(m.id) ?? { total: 0, confirmed: 0 };
+      return {
+        ...this.toDetail(
+          m,
+          m.user?.email ?? '',
+          m.user?.name ?? '',
+          m.user?.phone ?? null,
+          m.user?.isActive ?? false,
+          Boolean(m.setupToken),
+        ),
+        totalReferrals: s.total,
+        confirmedReferrals: s.confirmed,
+        earnings: s.confirmed * settings.commissionPerIndividual,
+      };
+    });
   }
 
   async updateAreaManager(id: string, dto: UpdateAreaManagerDto) {
@@ -832,6 +997,7 @@ export class AreaService {
       phone,
       isActive,
       pendingSetup,
+      franchiseCode: manager.franchiseCode,
       level: manager.level,
       province: manager.province,
       region: manager.region,

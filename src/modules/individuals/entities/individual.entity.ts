@@ -49,6 +49,15 @@ export class Individual {
   @Column({ type: 'varchar', length: 13 })
   cnicNumber: string;
 
+  /**
+   * The franchise (area-manager) whose code this individual registered under,
+   * if any. Used to credit the franchise a commission once the registration
+   * payment is confirmed.
+   */
+  @Index()
+  @Column({ type: 'uuid', nullable: true })
+  franchiseId: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   contactNumber: string | null;
 

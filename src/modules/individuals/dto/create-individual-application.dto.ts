@@ -25,6 +25,12 @@ export class CreateIndividualApplicationDto {
   @MaxLength(150)
   fullName: string;
 
+  /** Optional franchise/referral code the applicant registered under. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  franchiseCode?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(150)

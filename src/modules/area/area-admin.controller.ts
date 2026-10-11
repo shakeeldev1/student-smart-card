@@ -11,6 +11,7 @@ import {
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AreaService } from './area.service';
 import { CreateAreaManagerDto } from './dto/create-area-manager.dto';
@@ -29,6 +30,23 @@ export class AreaAdminController {
   @Get()
   list() {
     return this.areaService.listAreaManagers();
+  }
+
+  // Static routes before the ':id' routes so they aren't captured as an id.
+  @Get('commission')
+  getCommission() {
+    return this.areaService.getCommissionSettings();
+  }
+
+  @Patch('commission')
+  setCommission(
+    @CurrentUser('sub') adminId: string,
+    @Body('commissionPerIndividual') commissionPerIndividual: number,
+  ) {
+    return this.areaService.setCommission(
+      adminId,
+      Number(commissionPerIndividual) || 0,
+    );
   }
 
   @Post()

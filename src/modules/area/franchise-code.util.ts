@@ -1,0 +1,24 @@
+import { provinceCode, districtCode } from '../../common/geo/pakistan-geo-codes';
+
+/**
+ * Build a meaningful, bank-branch-style franchise code:
+ *   SSC-<PP><DD>-<NNNN>
+ * where PP = province code, DD = district code (00 when none), and NNNN is a
+ * zero-padded serial unique within that province+district prefix. The region
+ * is readable straight off the code, like a bank branch number.
+ */
+export function franchiseCodePrefix(
+  province?: string | null,
+  district?: string | null,
+): string {
+  return `SSC-${provinceCode(province)}${districtCode(province, district)}-`;
+}
+
+export function buildFranchiseCode(
+  province: string | null | undefined,
+  district: string | null | undefined,
+  serial: number,
+): string {
+  const n = String(serial).padStart(4, '0');
+  return `${franchiseCodePrefix(province, district)}${n}`;
+}

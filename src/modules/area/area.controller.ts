@@ -1,4 +1,13 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -6,6 +15,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AreaService } from './area.service';
 import type { SubFilter } from './area.service';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Read-only, area-scoped analytics for an AREA_MANAGER. Every response is
@@ -26,6 +37,23 @@ export class AreaController {
   @Get('analytics')
   getAnalytics(@CurrentUser('sub') userId: string) {
     return this.areaService.getAnalytics(userId);
+  }
+
+  @Get('franchise')
+  getFranchise(@CurrentUser('sub') userId: string) {
+    return this.areaService.getFranchiseForUser(userId);
+  }
+
+  @Post('franchise/invite')
+  invite(
+    @CurrentUser('sub') userId: string,
+    @Body('email') email: string,
+  ) {
+    const to = (email || '').trim();
+    if (!EMAIL_RE.test(to)) {
+      throw new BadRequestException('Enter a valid email address');
+    }
+    return this.areaService.invite(userId, to);
   }
 
   @Get('sub-areas')

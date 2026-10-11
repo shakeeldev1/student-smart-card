@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { Individual } from './entities/individual.entity';
 import { IndividualCard } from './entities/individual-card.entity';
+import { AreaManager } from '../area/entities/area-manager.entity';
 import { CreateIndividualApplicationDto } from './dto/create-individual-application.dto';
 import { UpdateIndividualApplicationDto } from './dto/update-individual-application.dto';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
@@ -52,6 +53,8 @@ export class IndividualsService {
     private readonly individualsRepository: Repository<Individual>,
     @InjectRepository(IndividualCard)
     private readonly cardsRepository: Repository<IndividualCard>,
+    @InjectRepository(AreaManager)
+    private readonly areaManagersRepository: Repository<AreaManager>,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailProvider,
     private readonly cloudinaryService: CloudinaryService,
@@ -96,8 +99,23 @@ export class IndividualsService {
       throw new BadRequestException('All consent confirmations are required');
     }
 
+    // Resolve an optional franchise/referral code to the franchise id.
+    let franchiseId: string | null = null;
+    if (dto.franchiseCode?.trim()) {
+      const franchise = await this.areaManagersRepository.findOne({
+        where: { franchiseCode: dto.franchiseCode.trim() },
+      });
+      if (!franchise) {
+        throw new BadRequestException(
+          'Invalid franchise code. Please check it or leave it blank.',
+        );
+      }
+      franchiseId = franchise.id;
+    }
+
     const individual = this.individualsRepository.create({
       userId,
+      franchiseId,
       fullName: dto.fullName,
       fatherName: dto.fatherName ?? null,
       dateOfBirth: dto.dateOfBirth,
