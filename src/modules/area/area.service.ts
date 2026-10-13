@@ -697,6 +697,21 @@ export class AreaService {
     return map;
   }
 
+  private async getReferrals(franchiseId: string) {
+    return this.individualsRepository.find({
+      where: { franchiseId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        contactNumber: true,
+        status: true,
+        createdAt: true,
+      },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   /** Manager-facing franchise summary: code, counts, earned/paid/outstanding. */
   async getFranchiseForUser(userId: string) {
     const manager = await this.managersRepository.findOne({ where: { userId } });
@@ -704,10 +719,11 @@ export class AreaService {
       throw new ForbiddenException('No franchise is assigned to this account.');
     }
     const code = await this.ensureFranchiseCode(manager);
-    const [counts, summary, payouts] = await Promise.all([
+    const [counts, summary, payouts, referrals] = await Promise.all([
       this.getReferralCounts([manager.id]),
       this.commissionService.getSummary(CommissionChannel.FRANCHISE, manager.id),
       this.commissionService.listPayouts(CommissionChannel.FRANCHISE, manager.id),
+      this.getReferrals(manager.id),
     ]);
     const frontendUrl =
       this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
@@ -720,6 +736,7 @@ export class AreaService {
       paid: summary.paid,
       outstanding: summary.outstanding,
       payouts,
+      referrals,
     };
   }
 
