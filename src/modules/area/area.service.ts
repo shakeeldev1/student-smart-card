@@ -719,11 +719,12 @@ export class AreaService {
       throw new ForbiddenException('No franchise is assigned to this account.');
     }
     const code = await this.ensureFranchiseCode(manager);
-    const [counts, summary, payouts, referrals] = await Promise.all([
+    const [counts, summary, payouts, referrals, payoutRequests] = await Promise.all([
       this.getReferralCounts([manager.id]),
       this.commissionService.getSummary(CommissionChannel.FRANCHISE, manager.id),
       this.commissionService.listPayouts(CommissionChannel.FRANCHISE, manager.id),
       this.getReferrals(manager.id),
+      this.commissionService.listPayoutRequests(CommissionChannel.FRANCHISE, manager.id),
     ]);
     const frontendUrl =
       this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
@@ -737,7 +738,24 @@ export class AreaService {
       outstanding: summary.outstanding,
       payouts,
       referrals,
+      payoutRequests,
     };
+  }
+
+  async requestFranchisePayout(userId: string, amount: number) {
+    const manager = await this.managersRepository.findOne({ where: { userId } });
+    if (!manager) throw new ForbiddenException('No franchise is assigned to this account.');
+    return this.commissionService.requestPayout(
+      CommissionChannel.FRANCHISE,
+      manager.id,
+      amount,
+    );
+  }
+
+  async confirmFranchisePayout(userId: string, requestId: string) {
+    const manager = await this.managersRepository.findOne({ where: { userId } });
+    if (!manager) throw new ForbiddenException('No franchise is assigned to this account.');
+    return this.commissionService.confirmPayoutRequest(requestId, manager.id);
   }
 
   /** Email a prospective individual a referral invite pre-filled with the code. */

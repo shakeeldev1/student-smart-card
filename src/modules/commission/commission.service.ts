@@ -10,6 +10,10 @@ import { FranchiseSettings } from '../area/entities/franchise-settings.entity';
 import { CommissionRate } from './entities/commission-rate.entity';
 import { CommissionPayout } from './entities/commission-payout.entity';
 import {
+  CommissionPayoutRequest,
+  CommissionPayoutRequestStatus,
+} from './entities/commission-payout-request.entity';
+import {
   CommissionChannel,
   COMMISSION_CHANNELS,
 } from './enums/commission-channel.enum';
@@ -37,6 +41,8 @@ export class CommissionService {
     private readonly ratesRepository: Repository<CommissionRate>,
     @InjectRepository(CommissionPayout)
     private readonly payoutsRepository: Repository<CommissionPayout>,
+    @InjectRepository(CommissionPayoutRequest)
+    private readonly payoutRequestsRepository: Repository<CommissionPayoutRequest>,
     @InjectRepository(FranchiseSettings)
     private readonly settingsRepository: Repository<FranchiseSettings>,
     @InjectRepository(Student)
@@ -225,6 +231,72 @@ export class CommissionService {
       where: { channel, partnerId },
       order: { paidAt: 'DESC' },
     });
+  }
+
+  async requestPayout(
+    channel: CommissionChannel,
+    partnerId: string,
+    amount: number,
+  ): Promise<CommissionPayoutRequest> {
+    const value = Math.round(Number(amount));
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new BadRequestException('Enter a payout amount greater than zero.');
+    }
+    const summary = await this.getSummary(channel, partnerId);
+    const pending = await this.payoutRequestsRepository.findOne({
+      where: { channel, partnerId, status: CommissionPayoutRequestStatus.PENDING },
+    });
+    if (pending) throw new BadRequestException('You already have a pending payout request.');
+    if (value > summary.outstanding) {
+      throw new BadRequestException('Requested amount exceeds your outstanding balance.');
+    }
+    return this.payoutRequestsRepository.save(
+      this.payoutRequestsRepository.create({ channel, partnerId, amount: value }),
+    );
+  }
+
+  listPayoutRequests(channel?: CommissionChannel, partnerId?: string) {
+    return this.payoutRequestsRepository.find({
+      where: { ...(channel ? { channel } : {}), ...(partnerId ? { partnerId } : {}) },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async reviewPayoutRequest(
+    id: string,
+    adminId: string,
+    status: CommissionPayoutRequestStatus.APPROVED | CommissionPayoutRequestStatus.REJECTED,
+    note?: string,
+    paymentReference?: string,
+  ) {
+    const request = await this.payoutRequestsRepository.findOne({ where: { id } });
+    if (!request || request.status !== CommissionPayoutRequestStatus.PENDING) {
+      throw new BadRequestException('Payout request is not pending.');
+    }
+    request.status = status;
+    request.adminNote = note?.trim() || null;
+    request.paymentReference = paymentReference?.trim() || null;
+    request.reviewedByUserId = adminId;
+    request.reviewedAt = new Date();
+    if (status === CommissionPayoutRequestStatus.APPROVED) {
+      await this.recordPayout(
+        request.channel as CommissionChannel,
+        request.partnerId,
+        request.amount,
+        request.paymentReference ?? undefined,
+        adminId,
+      );
+    }
+    return this.payoutRequestsRepository.save(request);
+  }
+
+  async confirmPayoutRequest(id: string, partnerId: string) {
+    const request = await this.payoutRequestsRepository.findOne({ where: { id, partnerId } });
+    if (!request || request.status !== CommissionPayoutRequestStatus.APPROVED) {
+      throw new BadRequestException('This payout is not awaiting confirmation.');
+    }
+    request.status = CommissionPayoutRequestStatus.CONFIRMED;
+    return this.payoutRequestsRepository.save(request);
   }
 
   // ---------------------------------------------------------------------------

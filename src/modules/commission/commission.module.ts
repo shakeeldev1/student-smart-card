@@ -7,6 +7,7 @@ import { Employee } from '../corporate/entities/employee.entity';
 import { FranchiseSettings } from '../area/entities/franchise-settings.entity';
 import { CommissionRate } from './entities/commission-rate.entity';
 import { CommissionPayout } from './entities/commission-payout.entity';
+import { CommissionPayoutRequest } from './entities/commission-payout-request.entity';
 import { CommissionService } from './commission.service';
 import { CommissionController } from './commission.controller';
 
@@ -26,6 +27,7 @@ import { CommissionController } from './commission.controller';
       FranchiseSettings,
       CommissionRate,
       CommissionPayout,
+      CommissionPayoutRequest,
     ]),
   ],
   providers: [CommissionService],

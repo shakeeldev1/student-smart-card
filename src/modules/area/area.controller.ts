@@ -53,7 +53,24 @@ export class AreaController {
     if (!EMAIL_RE.test(to)) {
       throw new BadRequestException('Enter a valid email address');
     }
+
     return this.areaService.invite(userId, to);
+  }
+
+  @Post('franchise/payout-request')
+  requestPayout(
+    @CurrentUser('sub') userId: string,
+    @Body('amount') amount: number,
+  ) {
+    return this.areaService.requestFranchisePayout(userId, amount);
+  }
+
+  @Post('franchise/payout-request/:id/confirm')
+  confirmPayout(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.areaService.confirmFranchisePayout(userId, id);
   }
 
   @Get('sub-areas')

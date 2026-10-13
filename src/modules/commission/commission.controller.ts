@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Post,
+  Param,
   Put,
   Query,
   UseGuards,
@@ -18,6 +19,7 @@ import {
   CommissionChannel,
   COMMISSION_CHANNELS,
 } from './enums/commission-channel.enum';
+import { CommissionPayoutRequestStatus } from './entities/commission-payout-request.entity';
 
 /** Admin management of per-variant commission overrides + partner payouts. */
 @Controller('admin/commission')
@@ -81,6 +83,26 @@ export class CommissionController {
       body.reference,
       adminId,
     );
+  }
+
+  @Get('payout-requests')
+  listPayoutRequests(@Query('channel') channel?: string, @Query('partnerId') partnerId?: string) {
+    return this.commissionService.listPayoutRequests(
+      channel ? this.parseChannel(channel) : undefined,
+      partnerId,
+    );
+  }
+
+  @Put('payout-requests/:id')
+  reviewPayoutRequest(
+    @Param('id') id: string,
+    @CurrentUser('sub') adminId: string,
+    @Body() body: { status: CommissionPayoutRequestStatus.APPROVED | CommissionPayoutRequestStatus.REJECTED; note?: string; paymentReference?: string },
+  ) {
+    if (![CommissionPayoutRequestStatus.APPROVED, CommissionPayoutRequestStatus.REJECTED].includes(body.status)) {
+      throw new BadRequestException('Invalid payout request status');
+    }
+    return this.commissionService.reviewPayoutRequest(id, adminId, body.status, body.note, body.paymentReference);
   }
 
   private parseChannel(value: string): CommissionChannel {
