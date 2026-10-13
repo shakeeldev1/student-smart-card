@@ -39,7 +39,9 @@ export class CommissionPayoutRequest {
   @Column({ type: 'varchar' })
   accountHolderName: string;
 
-  @Column({ type: 'enum', enum: CommissionPayoutRequestStatus, default: CommissionPayoutRequestStatus.PENDING })
+  // Stored as varchar (matches the migration and the rest of this module);
+  // the enum gives type-safety in code.
+  @Column({ type: 'varchar', default: CommissionPayoutRequestStatus.PENDING })
   status: CommissionPayoutRequestStatus;
 
   @Column({ type: 'varchar', nullable: true })
