@@ -673,7 +673,11 @@ export class AreaService {
       settings.commissionPerEmployee,
     );
     settings.updatedByUserId = adminId;
-    return this.franchiseSettingsRepository.save(settings);
+    const saved = await this.franchiseSettingsRepository.save(settings);
+    // Apply the new rate to confirmed-but-unpaid registrations so earnings
+    // reflect the change (settled partners stay frozen).
+    await this.commissionService.recomputeUnpaid();
+    return saved;
   }
 
   /** Total referred-individual counts per franchise id. */

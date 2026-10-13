@@ -289,6 +289,8 @@ export class CommissionService {
       if (rows.length) await manager.save(rows);
     });
     const count = await this.ratesRepository.count();
+    // Re-apply the new rates to confirmed-but-unpaid registrations.
+    await this.recomputeUnpaid();
     return { count };
   }
 
@@ -309,5 +311,50 @@ export class CommissionService {
       if (payment.commissionAmount != null) recorded += 1;
     }
     return { recorded };
+  }
+
+  /**
+   * Re-apply the current rate to confirmed, attributed registrations whose
+   * partner has NOT been paid out yet. This is what lets earnings update when a
+   * rate is set or changed after some payments were already confirmed (e.g. the
+   * rate was still 0 at confirmation). Partners who have received any payout are
+   * left untouched, so settled history is never rewritten. Also records
+   * commission on any confirmed-but-unrecorded rows.
+   */
+  async recomputeUnpaid(): Promise<{ updated: number }> {
+    // Partners that already received a payout — their numbers stay frozen.
+    const paidRows = await this.payoutsRepository
+      .createQueryBuilder('po')
+      .select('po.partnerId', 'pid')
+      .distinct(true)
+      .getRawMany<{ pid: string }>();
+    const settled = new Set(paidRows.map((r) => r.pid));
+
+    const rows = await this.paymentsRepository
+      .createQueryBuilder('p')
+      .where('p.status = :s', { s: PaymentStatus.CONFIRMED })
+      .getMany();
+
+    let updated = 0;
+    for (const payment of rows) {
+      // Not yet attributed (e.g. never recorded) — try to record it now.
+      if (payment.commissionAmount == null) {
+        await this.recordForPayment(payment);
+        if (payment.commissionAmount != null) updated += 1;
+        continue;
+      }
+      if (!payment.commissionChannel || !payment.commissionPartnerId) continue;
+      if (settled.has(payment.commissionPartnerId)) continue;
+      const amount = await this.getRate(
+        payment.commissionChannel as CommissionChannel,
+        payment.productVariant,
+      );
+      if (amount !== payment.commissionAmount) {
+        payment.commissionAmount = amount;
+        await this.paymentsRepository.save(payment);
+        updated += 1;
+      }
+    }
+    return { updated };
   }
 }

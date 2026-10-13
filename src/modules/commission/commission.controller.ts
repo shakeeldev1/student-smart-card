@@ -46,6 +46,11 @@ export class CommissionController {
     return this.commissionService.setOverrides(adminId, body.overrides ?? []);
   }
 
+  @Post('recompute')
+  recompute() {
+    return this.commissionService.recomputeUnpaid();
+  }
+
   @Get('payouts')
   listPayouts(
     @Query('channel') channel: string,
