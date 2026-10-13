@@ -8,7 +8,12 @@ import {
   Put,
   Query,
   UseGuards,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import type { Multer } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -99,10 +104,37 @@ export class CommissionController {
     @CurrentUser('sub') adminId: string,
     @Body() body: { status: CommissionPayoutRequestStatus.APPROVED | CommissionPayoutRequestStatus.REJECTED; note?: string; paymentReference?: string },
   ) {
-    if (![CommissionPayoutRequestStatus.APPROVED, CommissionPayoutRequestStatus.REJECTED].includes(body.status)) {
+    if (body.status !== CommissionPayoutRequestStatus.REJECTED) {
       throw new BadRequestException('Invalid payout request status');
     }
     return this.commissionService.reviewPayoutRequest(id, adminId, body.status, body.note, body.paymentReference);
+  }
+
+  @Post('payout-requests/:id/approve')
+  @UseInterceptors(
+    FileInterceptor('proof', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  approvePayoutRequest(
+    @Param('id') id: string,
+    @CurrentUser('sub') adminId: string,
+    @Body('paymentReference') paymentReference: string,
+    @UploadedFile() file?: Multer.File,
+  ) {
+    if (!paymentReference?.trim()) {
+      throw new BadRequestException('Payment reference is required');
+    }
+    if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+      throw new BadRequestException('A JPEG, PNG or WEBP payment proof image is required');
+    }
+    return this.commissionService.approvePayoutRequestWithProof(
+      id,
+      adminId,
+      paymentReference,
+      file,
+    );
   }
 
   private parseChannel(value: string): CommissionChannel {

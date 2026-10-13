@@ -10,9 +10,14 @@ export class AddCommissionPayoutRequests1788520000000 implements MigrationInterf
         "channel" character varying NOT NULL,
         "partnerId" uuid NOT NULL,
         "amount" integer NOT NULL,
+        "bankName" character varying NOT NULL DEFAULT '',
+        "accountNumber" character varying NOT NULL DEFAULT '',
+        "accountHolderName" character varying NOT NULL DEFAULT '',
         "status" character varying NOT NULL DEFAULT 'pending',
         "adminNote" character varying,
         "paymentReference" character varying,
+        "paymentProofUrl" character varying,
+        "paymentProofPublicId" character varying,
         "reviewedByUserId" uuid,
         "reviewedAt" TIMESTAMP WITH TIME ZONE,
         "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
@@ -20,6 +25,21 @@ export class AddCommissionPayoutRequests1788520000000 implements MigrationInterf
         CONSTRAINT "PK_commission_payout_requests" PRIMARY KEY ("id")
       )
     `);
+    await queryRunner.query(
+      `ALTER TABLE "commission_payout_requests" ADD COLUMN IF NOT EXISTS "bankName" character varying NOT NULL DEFAULT ''`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "commission_payout_requests" ADD COLUMN IF NOT EXISTS "accountNumber" character varying NOT NULL DEFAULT ''`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "commission_payout_requests" ADD COLUMN IF NOT EXISTS "accountHolderName" character varying NOT NULL DEFAULT ''`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "commission_payout_requests" ADD COLUMN IF NOT EXISTS "paymentProofUrl" character varying`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "commission_payout_requests" ADD COLUMN IF NOT EXISTS "paymentProofPublicId" character varying`,
+    );
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS "IDX_commission_payout_requests_channel" ON "commission_payout_requests" ("channel")`,
     );

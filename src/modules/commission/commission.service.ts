@@ -13,6 +13,7 @@ import {
   CommissionPayoutRequest,
   CommissionPayoutRequestStatus,
 } from './entities/commission-payout-request.entity';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import {
   CommissionChannel,
   COMMISSION_CHANNELS,
@@ -43,6 +44,7 @@ export class CommissionService {
     private readonly payoutsRepository: Repository<CommissionPayout>,
     @InjectRepository(CommissionPayoutRequest)
     private readonly payoutRequestsRepository: Repository<CommissionPayoutRequest>,
+    private readonly cloudinaryService: CloudinaryService,
     @InjectRepository(FranchiseSettings)
     private readonly settingsRepository: Repository<FranchiseSettings>,
     @InjectRepository(Student)
@@ -237,6 +239,11 @@ export class CommissionService {
     channel: CommissionChannel,
     partnerId: string,
     amount: number,
+    details: {
+      bankName: string;
+      accountNumber: string;
+      accountHolderName: string;
+    },
   ): Promise<CommissionPayoutRequest> {
     const value = Math.round(Number(amount));
     if (!Number.isFinite(value) || value <= 0) {
@@ -250,8 +257,21 @@ export class CommissionService {
     if (value > summary.outstanding) {
       throw new BadRequestException('Requested amount exceeds your outstanding balance.');
     }
+    const bankName = details.bankName?.trim();
+    const accountNumber = details.accountNumber?.trim();
+    const accountHolderName = details.accountHolderName?.trim();
+    if (!bankName || !accountNumber || !accountHolderName) {
+      throw new BadRequestException('Complete all payment details before requesting payment.');
+    }
     return this.payoutRequestsRepository.save(
-      this.payoutRequestsRepository.create({ channel, partnerId, amount: value }),
+      this.payoutRequestsRepository.create({
+        channel,
+        partnerId,
+        amount: value,
+        bankName,
+        accountNumber,
+        accountHolderName,
+      }),
     );
   }
 
@@ -278,15 +298,37 @@ export class CommissionService {
     request.paymentReference = paymentReference?.trim() || null;
     request.reviewedByUserId = adminId;
     request.reviewedAt = new Date();
-    if (status === CommissionPayoutRequestStatus.APPROVED) {
-      await this.recordPayout(
-        request.channel as CommissionChannel,
-        request.partnerId,
-        request.amount,
-        request.paymentReference ?? undefined,
-        adminId,
-      );
+    return this.payoutRequestsRepository.save(request);
+  }
+
+  async approvePayoutRequestWithProof(
+    id: string,
+    adminId: string,
+    paymentReference: string,
+    file: { buffer: Buffer; originalname: string },
+  ) {
+    const request = await this.payoutRequestsRepository.findOne({ where: { id } });
+    if (!request || request.status !== CommissionPayoutRequestStatus.PENDING) {
+      throw new BadRequestException('Payout request is not pending.');
     }
+    const proof = await this.cloudinaryService.uploadBuffer(
+      file.buffer,
+      'student-smart-card/payout-proofs',
+      file.originalname,
+    );
+    await this.recordPayout(
+      request.channel as CommissionChannel,
+      request.partnerId,
+      request.amount,
+      paymentReference,
+      adminId,
+    );
+    request.status = CommissionPayoutRequestStatus.APPROVED;
+    request.paymentReference = paymentReference.trim();
+    request.paymentProofUrl = proof.url;
+    request.paymentProofPublicId = proof.publicId;
+    request.reviewedByUserId = adminId;
+    request.reviewedAt = new Date();
     return this.payoutRequestsRepository.save(request);
   }
 

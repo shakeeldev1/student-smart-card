@@ -742,13 +742,22 @@ export class AreaService {
     };
   }
 
-  async requestFranchisePayout(userId: string, amount: number) {
+  async requestFranchisePayout(
+    userId: string,
+    amount: number,
+    details: {
+      bankName: string;
+      accountNumber: string;
+      accountHolderName: string;
+    },
+  ) {
     const manager = await this.managersRepository.findOne({ where: { userId } });
     if (!manager) throw new ForbiddenException('No franchise is assigned to this account.');
     return this.commissionService.requestPayout(
       CommissionChannel.FRANCHISE,
       manager.id,
       amount,
+      details,
     );
   }
 

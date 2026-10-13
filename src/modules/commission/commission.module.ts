@@ -10,6 +10,7 @@ import { CommissionPayout } from './entities/commission-payout.entity';
 import { CommissionPayoutRequest } from './entities/commission-payout-request.entity';
 import { CommissionService } from './commission.service';
 import { CommissionController } from './commission.controller';
+import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 
 /**
  * Commission ledger: snapshots a per-registration commission at payment
@@ -19,6 +20,7 @@ import { CommissionController } from './commission.controller';
  */
 @Module({
   imports: [
+    CloudinaryModule,
     TypeOrmModule.forFeature([
       Payment,
       Student,

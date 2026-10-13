@@ -60,9 +60,15 @@ export class AreaController {
   @Post('franchise/payout-request')
   requestPayout(
     @CurrentUser('sub') userId: string,
-    @Body('amount') amount: number,
+    @Body()
+    body: {
+      amount: number;
+      bankName: string;
+      accountNumber: string;
+      accountHolderName: string;
+    },
   ) {
-    return this.areaService.requestFranchisePayout(userId, amount);
+    return this.areaService.requestFranchisePayout(userId, body.amount, body);
   }
 
   @Post('franchise/payout-request/:id/confirm')

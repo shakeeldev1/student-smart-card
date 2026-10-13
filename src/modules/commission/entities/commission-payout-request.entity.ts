@@ -30,6 +30,15 @@ export class CommissionPayoutRequest {
   @Column({ type: 'int' })
   amount: number;
 
+  @Column({ type: 'varchar' })
+  bankName: string;
+
+  @Column({ type: 'varchar' })
+  accountNumber: string;
+
+  @Column({ type: 'varchar' })
+  accountHolderName: string;
+
   @Column({ type: 'enum', enum: CommissionPayoutRequestStatus, default: CommissionPayoutRequestStatus.PENDING })
   status: CommissionPayoutRequestStatus;
 
@@ -38,6 +47,12 @@ export class CommissionPayoutRequest {
 
   @Column({ type: 'varchar', nullable: true })
   paymentReference: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  paymentProofUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  paymentProofPublicId: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   reviewedByUserId: string | null;
