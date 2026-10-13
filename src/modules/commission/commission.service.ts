@@ -312,7 +312,6 @@ export class CommissionService {
     }
     return { recorded };
   }
-
   /**
    * Re-apply the current rate to confirmed, attributed registrations whose
    * partner has NOT been paid out yet. This is what lets earnings update when a
