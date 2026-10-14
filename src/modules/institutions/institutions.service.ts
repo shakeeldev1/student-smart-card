@@ -115,10 +115,14 @@ export class InstitutionsService {
       throw new NotFoundException('No institution found for this account');
     }
     const code = await this.ensureReferralCode(institution);
-    const [counts, summary, payouts] = await Promise.all([
+    const [counts, summary, payouts, payoutRequests] = await Promise.all([
       this.getStudentCounts([institution.id]),
       this.commissionService.getSummary(CommissionChannel.SCHOOL, institution.id),
       this.commissionService.listPayouts(CommissionChannel.SCHOOL, institution.id),
+      this.commissionService.listPayoutRequests(
+        CommissionChannel.SCHOOL,
+        institution.id,
+      ),
     ]);
     return {
       code,
@@ -128,7 +132,35 @@ export class InstitutionsService {
       paid: summary.paid,
       outstanding: summary.outstanding,
       payouts,
+      payoutRequests,
     };
+  }
+
+  /** School self-service: request a payout of outstanding commission. */
+  async requestPayout(
+    ownerUserId: string,
+    amount: number,
+    details: { bankName: string; accountNumber: string; accountHolderName: string },
+  ) {
+    const institution = await this.findByOwnerUserId(ownerUserId);
+    if (!institution) {
+      throw new NotFoundException('No institution found for this account');
+    }
+    return this.commissionService.requestPayout(
+      CommissionChannel.SCHOOL,
+      institution.id,
+      amount,
+      details,
+    );
+  }
+
+  /** School self-service: confirm receipt of an approved payout. */
+  async confirmPayout(ownerUserId: string, requestId: string) {
+    const institution = await this.findByOwnerUserId(ownerUserId);
+    if (!institution) {
+      throw new NotFoundException('No institution found for this account');
+    }
+    return this.commissionService.confirmPayoutRequest(requestId, institution.id);
   }
 
   /** Admin: every school with its code, counts and earned/paid/outstanding. */

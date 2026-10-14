@@ -111,10 +111,14 @@ export class CompaniesService {
       throw new NotFoundException('No company found for this account');
     }
     const code = await this.ensureReferralCode(company);
-    const [counts, summary, payouts] = await Promise.all([
+    const [counts, summary, payouts, payoutRequests] = await Promise.all([
       this.getEmployeeCounts([company.id]),
       this.commissionService.getSummary(CommissionChannel.CORPORATE, company.id),
       this.commissionService.listPayouts(CommissionChannel.CORPORATE, company.id),
+      this.commissionService.listPayoutRequests(
+        CommissionChannel.CORPORATE,
+        company.id,
+      ),
     ]);
     return {
       code,
@@ -124,7 +128,35 @@ export class CompaniesService {
       paid: summary.paid,
       outstanding: summary.outstanding,
       payouts,
+      payoutRequests,
     };
+  }
+
+  /** Company self-service: request a payout of outstanding commission. */
+  async requestPayout(
+    ownerUserId: string,
+    amount: number,
+    details: { bankName: string; accountNumber: string; accountHolderName: string },
+  ) {
+    const company = await this.findByOwnerUserId(ownerUserId);
+    if (!company) {
+      throw new NotFoundException('No company found for this account');
+    }
+    return this.commissionService.requestPayout(
+      CommissionChannel.CORPORATE,
+      company.id,
+      amount,
+      details,
+    );
+  }
+
+  /** Company self-service: confirm receipt of an approved payout. */
+  async confirmPayout(ownerUserId: string, requestId: string) {
+    const company = await this.findByOwnerUserId(ownerUserId);
+    if (!company) {
+      throw new NotFoundException('No company found for this account');
+    }
+    return this.commissionService.confirmPayoutRequest(requestId, company.id);
   }
 
   /** Admin: every company with its code, counts and earned/paid/outstanding. */

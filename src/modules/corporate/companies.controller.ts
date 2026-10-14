@@ -52,6 +52,31 @@ export class CompaniesController {
     return this.companiesService.getMyReferral(userId);
   }
 
+  @Post('me/payout-request')
+  @Roles(UserRole.CORPORATE)
+  requestPayout(
+    @CurrentUser('sub') userId: string,
+    @Body()
+    body: {
+      amount: number;
+      bankName: string;
+      accountNumber: string;
+      accountHolderName: string;
+    },
+  ) {
+    return this.companiesService.requestPayout(userId, body.amount, {
+      bankName: body.bankName,
+      accountNumber: body.accountNumber,
+      accountHolderName: body.accountHolderName,
+    });
+  }
+
+  @Post('me/payout-request/:id/confirm')
+  @Roles(UserRole.CORPORATE)
+  confirmPayout(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    return this.companiesService.confirmPayout(userId, id);
+  }
+
   @Get('referrals')
   @Roles(UserRole.ADMIN)
   listReferrals() {

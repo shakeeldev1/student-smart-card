@@ -49,6 +49,34 @@ export class InstitutionsController {
     return this.institutionsService.getMyReferral(ownerUserId);
   }
 
+  @Post('me/payout-request')
+  @Roles(UserRole.SCHOOL)
+  requestPayout(
+    @CurrentUser('sub') ownerUserId: string,
+    @Body()
+    body: {
+      amount: number;
+      bankName: string;
+      accountNumber: string;
+      accountHolderName: string;
+    },
+  ) {
+    return this.institutionsService.requestPayout(ownerUserId, body.amount, {
+      bankName: body.bankName,
+      accountNumber: body.accountNumber,
+      accountHolderName: body.accountHolderName,
+    });
+  }
+
+  @Post('me/payout-request/:id/confirm')
+  @Roles(UserRole.SCHOOL)
+  confirmPayout(
+    @CurrentUser('sub') ownerUserId: string,
+    @Param('id') id: string,
+  ) {
+    return this.institutionsService.confirmPayout(ownerUserId, id);
+  }
+
   @Get('referrals')
   @Roles(UserRole.ADMIN)
   listReferrals() {
