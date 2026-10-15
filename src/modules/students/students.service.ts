@@ -287,11 +287,10 @@ export class StudentsService {
       qb.andWhere('student.institutionId = :institutionId', {
         institutionId: institution.id,
       });
-    } else if (
-      (currentUser.role === UserRole.ADMIN ||
-        currentUser.role === UserRole.EFU) &&
-      filters.institutionId
-    ) {
+    } else if (filters.institutionId) {
+      // Any non-school viewer (admin, EFU, operator, super-admin) that passes an
+      // institutionId must have the list scoped to it. Without this, elevated
+      // roles not named above skipped the filter and saw every student.
       qb.andWhere('student.institutionId = :institutionId', {
         institutionId: filters.institutionId,
       });

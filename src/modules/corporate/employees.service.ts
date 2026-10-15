@@ -18,6 +18,7 @@ import { CompaniesService } from './companies.service';
 import { CardsService } from '../cards/cards.service';
 import { PaymentsService } from '../payments/payments.service';
 import { UsersService } from '../users/users.service';
+import { User } from '../users/entities/user.entity';
 import { registrationFeeForVariant } from '../../common/payments/registration-fee.util';
 import { Payment } from '../payments/entities/payment.entity';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
@@ -195,16 +196,18 @@ export class EmployeesService {
     const qb = this.employeesRepository
       .createQueryBuilder('employee')
       .leftJoinAndSelect('employee.card', 'card')
-      .leftJoinAndSelect('employee.company', 'company');
+      .leftJoinAndSelect('employee.company', 'company')
+      // Only the account photo column (no other user fields) for the fallback.
+      .leftJoin('employee.user', 'user')
+      .addSelect('user.profilePhotoUrl');
 
     if (currentUser.role === UserRole.CORPORATE) {
       const company = await this.companiesService.findByOwnerUserId(currentUser.sub);
       if (!company) return [];
       qb.andWhere('employee.companyId = :companyId', { companyId: company.id });
-    } else if (
-      (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.EFU) &&
-      filters.companyId
-    ) {
+    } else if (filters.companyId) {
+      // Any non-corporate viewer (admin, EFU, operator, super-admin) that passes
+      // a companyId must have the list scoped to it.
       qb.andWhere('employee.companyId = :companyId', { companyId: filters.companyId });
     }
 
@@ -228,7 +231,13 @@ export class EmployeesService {
     }
 
     qb.orderBy('employee.createdAt', 'DESC');
-    return qb.getMany();
+    const rows = await qb.getMany();
+    for (const e of rows) {
+      if (!e.photoUrl && e.user?.profilePhotoUrl) {
+        e.photoUrl = e.user.profilePhotoUrl;
+      }
+    }
+    return rows;
   }
 
   async uploadPhoto(
@@ -274,6 +283,16 @@ export class EmployeesService {
     userId: string,
   ): Promise<Employee & { payment: PaymentSummary | null }> {
     const employee = await this.findByUserId(userId);
+    // Fall back to the account profile photo when no application photo exists.
+    if (!employee.photoUrl) {
+      const owner = await this.employeesRepository.manager
+        .getRepository(User)
+        .findOne({
+          where: { id: userId },
+          select: { id: true, profilePhotoUrl: true },
+        });
+      if (owner?.profilePhotoUrl) employee.photoUrl = owner.profilePhotoUrl;
+    }
     const payment = await this.paymentsService.getForEmployee(employee.id);
     return {
       ...employee,

@@ -11,6 +11,7 @@ import { randomBytes } from 'crypto';
 import { Individual } from './entities/individual.entity';
 import { IndividualCard } from './entities/individual-card.entity';
 import { AreaManager } from '../area/entities/area-manager.entity';
+import { User } from '../users/entities/user.entity';
 import { CreateIndividualApplicationDto } from './dto/create-individual-application.dto';
 import { UpdateIndividualApplicationDto } from './dto/update-individual-application.dto';
 import { ApplicationStatus } from '../students/enums/application-status.enum';
@@ -186,6 +187,18 @@ export class IndividualsService {
       });
       individual.franchiseCode = franchise?.franchiseCode ?? null;
     }
+    // Fall back to the account profile photo when no application photo was
+    // uploaded, so the card shows whichever photo the holder set. Fetch only
+    // the one column (never the whole user) to avoid leaking credentials.
+    if (!individual.photoUrl && individual.userId) {
+      const owner = await this.individualsRepository.manager
+        .getRepository(User)
+        .findOne({
+          where: { id: individual.userId },
+          select: { id: true, profilePhotoUrl: true },
+        });
+      if (owner?.profilePhotoUrl) individual.photoUrl = owner.profilePhotoUrl;
+    }
     return individual;
   }
 
@@ -193,7 +206,15 @@ export class IndividualsService {
     userId: string,
     dto: UpdateIndividualApplicationDto,
   ): Promise<Individual> {
-    const individual = await this.findMine(userId);
+    // Load the raw entity directly (not via findMine) so the photo fallback
+    // applied for display is never persisted back onto the record.
+    const individual = await this.individualsRepository.findOne({
+      where: { userId },
+      relations: { card: true },
+    });
+    if (!individual) {
+      throw new NotFoundException('No application found for this account');
+    }
     if (
       individual.status !== ApplicationStatus.PENDING &&
       individual.status !== ApplicationStatus.CHANGES_REQUESTED
@@ -230,7 +251,16 @@ export class IndividualsService {
     }
 
     qb.orderBy('individual.createdAt', 'DESC');
-    return qb.getMany();
+    const rows = await qb.getMany();
+    for (const i of rows) {
+      // Show the account profile photo when no application photo exists.
+      if (!i.photoUrl && i.user?.profilePhotoUrl) {
+        i.photoUrl = i.user.profilePhotoUrl;
+      }
+      // Never ship the password hash to the admin UI.
+      if (i.user) delete (i.user as { passwordHash?: string }).passwordHash;
+    }
+    return rows;
   }
 
   private async findByIdOrThrow(id: string): Promise<Individual> {
