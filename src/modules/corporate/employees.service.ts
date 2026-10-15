@@ -576,7 +576,8 @@ export class EmployeesService {
     if (
       currentUser.role === UserRole.OPERATOR ||
       currentUser.role === UserRole.EFU ||
-      currentUser.role === UserRole.ADMIN
+      currentUser.role === UserRole.ADMIN ||
+      currentUser.role === UserRole.SUPER_ADMIN
     ) {
       return;
     }

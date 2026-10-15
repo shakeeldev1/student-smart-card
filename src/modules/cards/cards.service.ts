@@ -179,6 +179,7 @@ export class CardsService {
     const student = card.student;
     const isStaff =
       currentUser.role === UserRole.ADMIN ||
+      currentUser.role === UserRole.SUPER_ADMIN ||
       currentUser.role === UserRole.OPERATOR;
     const isHolder = Boolean(student?.userId) && student.userId === currentUser.sub;
     const isOwningSchool =

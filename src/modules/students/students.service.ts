@@ -518,7 +518,10 @@ export class StudentsService {
     // Only an admin may edit the guardian on record. A school registers the
     // guardian at enrollment but cannot change it later; unspecified fields
     // are left untouched.
-    if (currentUser.role === UserRole.ADMIN) {
+    if (
+      currentUser.role === UserRole.ADMIN ||
+      currentUser.role === UserRole.SUPER_ADMIN
+    ) {
       const guardianPatch = Object.fromEntries(
         Object.entries({
           guardianName,
@@ -637,7 +640,8 @@ export class StudentsService {
     if (
       currentUser.role === UserRole.OPERATOR ||
       currentUser.role === UserRole.EFU ||
-      currentUser.role === UserRole.ADMIN
+      currentUser.role === UserRole.ADMIN ||
+      currentUser.role === UserRole.SUPER_ADMIN
     ) {
       return;
     }

@@ -134,7 +134,10 @@ export class ClassesService {
     currentUser: JwtPayload,
     schoolClass: SchoolClass,
   ): Promise<void> {
-    if (currentUser.role === UserRole.ADMIN) {
+    if (
+      currentUser.role === UserRole.ADMIN ||
+      currentUser.role === UserRole.SUPER_ADMIN
+    ) {
       return;
     }
     const institution = await this.institutionsService.findByOwnerUserId(
